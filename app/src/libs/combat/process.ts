@@ -165,11 +165,14 @@ export const applyEffects = (battle: CompleteBattle, actorId: string) => {
             const hasEffect = usersEffects.some((ue) => ue.id === e.id);
             const isInstant = ["damage", "heal", "pierce"].includes(e.type);
             if (!hasEffect) {
+              // NOTE:
+              // 1. If the effect is instant, it is applied immediately
+              // 2. User effects from Ground effects are not forwarded to the next round
               usersEffects.push({
                 ...e,
                 rounds: isInstant ? 0 : 1,
                 targetId: user.userId,
-                createdRound: curRound,
+                createdRound: isInstant ? curRound : curRound - 1,
                 fromGround: true,
               } as UserEffect);
             }
@@ -188,7 +191,15 @@ export const applyEffects = (battle: CompleteBattle, actorId: string) => {
           }
         }
       }
-      // Let ground effect continue, or is it done?
+
+      // Show once appearing animation
+      if (e.appearAnimation && e.isNew && e.type !== "visual") {
+        newGroundEffects.push(
+          getVisual(e.longitude, e.latitude, e.appearAnimation, round),
+        );
+      }
+
+      // Process round reduction & tag removal
       if (isEffectActive(e) || e.type === "visual") {
         e.isNew = false;
         newGroundEffects.push(e);
@@ -198,11 +209,8 @@ export const applyEffects = (battle: CompleteBattle, actorId: string) => {
         );
       }
     }
-    if (e.appearAnimation && e.isNew && e.type !== "visual") {
-      newGroundEffects.push(
-        getVisual(e.longitude, e.latitude, e.appearAnimation, round),
-      );
-    }
+
+    // Add info to action effects if it exists
     if (info) actionEffects.push(info);
   });
 
