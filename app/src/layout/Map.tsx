@@ -450,6 +450,31 @@ const Map: React.FC<MapProps> = (props) => {
           )}
         </ul>
       </div>
+      <p className="py-2">
+                    Select sector you wish to highlight on the global map.
+      </p>
+      <div className="flex flex-row items-center gap-2">
+        {highlightedSector ? <p>Currently selected sector:</p> : undefined}
+          <Form {...sectorForm}>
+            <FormField
+              control={sectorForm.control}
+              name="sector"
+              render={({ field }) => (
+              <FormItem>
+                <FormControl>
+                  <Input
+                    className="w-full"
+                    placeholder="Sector Highlight"
+                    type="number"
+                    {...field}
+                  />
+                </FormControl>
+              <FormMessage />
+              </FormItem>
+                        )}
+                      />
+                    </Form>
+                  </div>
       <div className="absolute right-0 top-0 m-5">
         <ul>
           {hoverSector && (
