@@ -545,7 +545,7 @@ export const ClanBattles: React.FC<ClanBattlesProps> = (props) => {
  *
  * @component
  * @param {ClanRequestsProps} props - The component props.
- * @returns {JSX.Element} The rendered component.
+ * @returns {React.ReactNode} The rendered component.
  */
 interface ClanRequestsProps {
   clanId: string;
@@ -857,7 +857,7 @@ export const ClanInfo: React.FC<ClanInfoProps> = (props) => {
                 Founder:{" "}
                 <Link
                   className="font-bold hover:text-orange-500"
-                  href={`/users/${clanData.founder.userId}`}
+                  href={`/userid/${clanData.founder.userId}`}
                 >
                   {clanData.founder.username}
                 </Link>
@@ -866,7 +866,7 @@ export const ClanInfo: React.FC<ClanInfoProps> = (props) => {
                 Leader:{" "}
                 <Link
                   className="font-bold hover:text-orange-500"
-                  href={`/users/${clanData.leader.userId}`}
+                  href={`/userid/${clanData.leader.userId}`}
                 >
                   {clanData.leader.username}
                 </Link>
@@ -1128,8 +1128,8 @@ export const ClanMembers: React.FC<ClanMembersProps> = (props) => {
             { key: "pvpActivity", header: "PVP Activity", type: "string" },
             { key: "actions", header: "Actions", type: "jsx" },
           ]}
-          linkPrefix="/users/"
-          linkColumn={"userId"}
+          linkPrefix="/username/"
+          linkColumn={"username"}
         />
       )}
     </ContentBox>

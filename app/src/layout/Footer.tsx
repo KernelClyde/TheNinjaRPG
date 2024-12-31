@@ -10,7 +10,7 @@ const Footer: React.FC = () => {
           target="_blank"
           className="hover:text-gray-500"
         >
-          Terms of Service
+          ToS
         </Link>{" "}
         -{" "}
         <Link
@@ -18,19 +18,23 @@ const Footer: React.FC = () => {
           target="_blank"
           className="hover:text-gray-500"
         >
-          Privacy Policy
+          Privacy
         </Link>{" "}
-        -{" "}
+        - Cookie{" "}
         <Link
           href="https://app.termly.io/document/cookie-policy/971fe8a9-3613-41a0-86ad-8e08e7be93d7"
           target="_blank"
           className="hover:text-gray-500"
         >
-          Cookie Policy
+          Policy
+        </Link>
+        {" / "}
+        <Link href="/conscent" className="hover:text-gray-500">
+          Conscent
         </Link>{" "}
         -{" "}
         <Link href="/rules" className="hover:text-gray-500">
-          Game Rules
+          Rules
         </Link>{" "}
         -{" "}
         <Link href="/staff" className="hover:text-gray-500">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, use } from "react";
 import Loader from "@/layout/Loader";
 import ContentBox from "@/layout/ContentBox";
 import Table, { type ColumnDefinitionType } from "@/layout/Table";
@@ -12,7 +12,10 @@ import { useInfinitePagination } from "@/libs/pagination";
 import { useUserSearch } from "@/utils/search";
 import type { ArrayElement } from "@/utils/typeutils";
 
-export default function VillageUsers({ params }: { params: { villageid: string } }) {
+export default function VillageUsers(props: {
+  params: Promise<{ villageid: string }>;
+}) {
+  const params = use(props.params);
   const villageId = params.villageid;
   const tabNames = ["Online", "Strongest"] as const;
   const [activeTab, setActiveTab] = useState<(typeof tabNames)[number]>("Online");
@@ -90,8 +93,8 @@ export default function VillageUsers({ params }: { params: { villageid: string }
       <Table
         data={allUsers}
         columns={columns}
-        linkPrefix="/users/"
-        linkColumn={"userId"}
+        linkPrefix="/username/"
+        linkColumn={"username"}
         setLastElement={setLastElement}
       />
     </ContentBox>

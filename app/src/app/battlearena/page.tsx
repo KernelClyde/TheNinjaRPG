@@ -197,7 +197,7 @@ const SelectAI: React.FC<SelectAIProps> = (props) => {
                       image: ai.avatar,
                       description: "",
                       rarity: "COMMON",
-                      href: `/users/${ai.userId}`,
+                      href: `/userid/${ai.userId}`,
                       attacks: ai.jutsus?.map((jutsu) =>
                         "jutsu" in jutsu ? jutsu.jutsu?.name : "Unknown",
                       ),
@@ -230,17 +230,17 @@ const ChallengeAI: React.FC<ChallengeAIProps> = (props) => {
   // Mutation for starting a fight
   const { mutate: attack, isPending: isAttacking } =
     api.combat.startArenaBattle.useMutation({
-      onSuccess: async (data) => {
-        if (data.success && data.battleId) {
+      onSuccess: async (result) => {
+        if (result.success && result.battleId) {
           await updateUser({
             status: "BATTLE",
-            battleId: data.battleId,
+            battleId: result.battleId,
             updatedAt: new Date(),
           });
           router.push("/combat");
-          showMutationToast({ ...data, message: "Entering the Arena" });
+          showMutationToast({ ...result, message: "Entering the Arena" });
         } else {
-          showMutationToast(data);
+          showMutationToast(result);
         }
       },
     });

@@ -271,7 +271,7 @@ export const profileRouter = createTRPCRouter({
       if (user.earnedExperience > 0) {
         notifications.push({
           href: "/profile/experience",
-          name: `Earned exp: ${user.earnedExperience}`,
+          name: "Unassigned Stats",
           color: "blue",
         });
       }
@@ -312,7 +312,7 @@ export const profileRouter = createTRPCRouter({
       if (user.inboxNews > 0) {
         notifications?.push({
           href: "/inbox",
-          name: `${user.inboxNews} new messages`,
+          name: `${user.inboxNews} messages`,
           color: "green",
         });
       }
@@ -320,7 +320,7 @@ export const profileRouter = createTRPCRouter({
       if (user.unreadNews > 0) {
         notifications?.push({
           href: "/news",
-          name: `${user.unreadNews} new news`,
+          name: `${user.unreadNews} news`,
           color: "green",
         });
       }
@@ -554,11 +554,10 @@ export const profileRouter = createTRPCRouter({
     )
     .query(async ({ ctx, input }) => {
       const username = await ctx.drizzle.query.userData.findFirst({
-        columns: { username: true },
+        columns: { username: true, userId: true },
         where: eq(userData.username, input.username),
       });
-      if (username) return username;
-      return null;
+      return username || null;
     }),
   // Update username
   updateUsername: protectedProcedure
@@ -608,7 +607,28 @@ export const profileRouter = createTRPCRouter({
   // Use earned experience points for stats
   useUnusedExperiencePoints: protectedProcedure
     .input(createStatSchema(0, 0))
-    .output(baseServerResponse)
+    .output(
+      baseServerResponse.extend({
+        data: z
+          .object({
+            ninjutsuOffence: z.number(),
+            taijutsuOffence: z.number(),
+            genjutsuOffence: z.number(),
+            bukijutsuOffence: z.number(),
+            ninjutsuDefence: z.number(),
+            taijutsuDefence: z.number(),
+            genjutsuDefence: z.number(),
+            bukijutsuDefence: z.number(),
+            strength: z.number(),
+            speed: z.number(),
+            intelligence: z.number(),
+            willpower: z.number(),
+            experience: z.number(),
+            earnedExperience: z.number(),
+          })
+          .optional(),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
       // Query
       const user = await fetchUser(ctx.drizzle, ctx.userId);
@@ -638,24 +658,25 @@ export const profileRouter = createTRPCRouter({
       user.willpower += Math.floor(input.willpower);
       capUserStats(user);
       // Update
+      const data = {
+        ninjutsuOffence: user.ninjutsuOffence,
+        taijutsuOffence: user.taijutsuOffence,
+        genjutsuOffence: user.genjutsuOffence,
+        bukijutsuOffence: user.bukijutsuOffence,
+        ninjutsuDefence: user.ninjutsuDefence,
+        taijutsuDefence: user.taijutsuDefence,
+        genjutsuDefence: user.genjutsuDefence,
+        bukijutsuDefence: user.bukijutsuDefence,
+        strength: user.strength,
+        speed: user.speed,
+        intelligence: user.intelligence,
+        willpower: user.willpower,
+        experience: user.experience + inputSum,
+        earnedExperience: user.earnedExperience - inputSum,
+      };
       const result = await ctx.drizzle
         .update(userData)
-        .set({
-          ninjutsuOffence: user.ninjutsuOffence,
-          taijutsuOffence: user.taijutsuOffence,
-          genjutsuOffence: user.genjutsuOffence,
-          bukijutsuOffence: user.bukijutsuOffence,
-          ninjutsuDefence: user.ninjutsuDefence,
-          taijutsuDefence: user.taijutsuDefence,
-          genjutsuDefence: user.genjutsuDefence,
-          bukijutsuDefence: user.bukijutsuDefence,
-          strength: user.strength,
-          speed: user.speed,
-          intelligence: user.intelligence,
-          willpower: user.willpower,
-          experience: sql`experience + ${inputSum}`,
-          earnedExperience: sql`earnedExperience - ${inputSum}`,
-        })
+        .set(data)
         .where(
           and(
             eq(userData.userId, ctx.userId),
@@ -665,7 +686,7 @@ export const profileRouter = createTRPCRouter({
       if (result.rowsAffected === 0) {
         return errorResponse("Could not update user");
       } else {
-        return { success: true, message: "User stats updated" };
+        return { success: true, message: "User stats updated", data };
       }
     }),
   // Get nindo text of user

@@ -20,18 +20,21 @@ const ConceptBox_ConceptImage: React.FC<ConceptBox_ConceptImageProps> = (props) 
   );
 
   // Guard
-  if (isFetching || !image) return <Loader explanation="Fetching image" />;
+  if (isFetching) return <Loader explanation="Fetching image" />;
 
   // Render
   return (
     <ContentBox
       {...props}
       title="Concept Art"
-      subtitle={`Created by ${image.user.username}`}
+      subtitle={`Created by ${image?.user?.username || "unknown"}`}
       topRightContent={
         image && (
           <div className="w-14">
-            <Link href={`/users/${image.userId}`}>
+            <Link
+              href={`/username/${image?.user?.username}`}
+              aria-label={image?.user?.username || "unknown user"}
+            >
               <AvatarImage
                 href={image.user.avatar}
                 alt={image.userId}
@@ -45,6 +48,7 @@ const ConceptBox_ConceptImage: React.FC<ConceptBox_ConceptImageProps> = (props) 
       }
     >
       {image && <ConceptImage image={image} showDetails={true} />}
+      {!image && <div>Image could not be found anymore</div>}
     </ContentBox>
   );
 };

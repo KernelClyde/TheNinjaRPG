@@ -406,13 +406,14 @@ export const USER_CAPS: {
 } as const;
 
 // Paypal shop config
-export const PAYPAL_DISCOUNT_PERCENT = 20;
+export const PAYPAL_DISCOUNT_PERCENT = 0;
 export const TRANSACTION_TYPES = ["REP_PURCHASE", "REFERRAL"] as const;
 export type TransactionType = (typeof TRANSACTION_TYPES)[number];
 
 // Reputation cost config
 export const COST_CHANGE_USERNAME = 5;
 export const COST_CUSTOM_TITLE = 5;
+export const COST_CHANGE_GENDER = 5;
 export const COST_SWAP_BLOODLINE = 0;
 export const COST_SWAP_VILLAGE = 0;
 export const COST_RESET_STATS = 15;
@@ -539,6 +540,47 @@ export const ID_ANIMATION_HIT = "oh4kVNrAwF";
 export const ID_ANIMATION_HEAL = "I9aYhT5wMB";
 
 // Images
+export const IMG_FRONTPAGE_SCREENSHOT_COMBAT =
+  "https://utfs.io/f/Hzww9EQvYURJmap513HE4IMO5Goa7cgLxPJ0VC6lU8vbt1Ap";
+export const IMG_FRONTPAGE_SCREENSHOT_JUTSUS =
+  "https://utfs.io/f/Hzww9EQvYURJhf79QHMfUBdnwAX5LTajlNc4mrgzi0RJtqpM";
+export const IMG_FRONTPAGE_SCREENSHOT_GLOBAL =
+  "https://utfs.io/f/Hzww9EQvYURJn24vk3mojJ0EqeDCvBrNmZaXVdY97gSpOWiA";
+export const IMG_FRONTPAGE_SCREENSHOT_SECTOR =
+  "https://utfs.io/f/Hzww9EQvYURJdVdE0WP62PI3ciLaYzgVX8FopBADxSrGmvQl";
+export const IMG_FRONTPAGE_SCREENSHOT_VILLAGE =
+  "https://utfs.io/f/Hzww9EQvYURJAPlRYqoZUC4muiGcQNzjfEndY5y1w20B8hTW";
+
+export const IMG_FRONTPAGE_SCREENSHOT_COMBAT_HR =
+  "https://utfs.io/f/Hzww9EQvYURJhuLmX5MfUBdnwAX5LTajlNc4mrgzi0RJtqpM";
+export const IMG_FRONTPAGE_SCREENSHOT_JUTSUS_HR =
+  "https://utfs.io/f/Hzww9EQvYURJAaVOt2SoZUC4muiGcQNzjfEndY5y1w20B8hT";
+export const IMG_FRONTPAGE_SCREENSHOT_GLOBAL_HR =
+  "https://utfs.io/f/Hzww9EQvYURJvSzUp4EmSnXwslYEpV1yOeNL8gMtqhjPdf36";
+export const IMG_FRONTPAGE_SCREENSHOT_SECTOR_HR =
+  "https://utfs.io/f/Hzww9EQvYURJXMBBarqIOpAoLKbZ4nW9Rsil2V67yuFwQhqv";
+export const IMG_FRONTPAGE_SCREENSHOT_VILLAGE_HR =
+  "https://utfs.io/f/Hzww9EQvYURJRmBtUg0udmODoNtpa0FMcwI4k2Eq7nJhyvjl";
+
+export const IMG_REGISTRATIN_STEP1 =
+  "https://utfs.io/f/Hzww9EQvYURJeKNAEEyV3OvUJQExAi0bGoIZDF74LqSnHRdp";
+export const IMG_REGISTRATIN_STEP2 =
+  "https://utfs.io/f/Hzww9EQvYURJTOMd6Y5IU29dZYJPoOKSh5vmlqatMub3EigH";
+export const IMG_REGISTRATIN_STEP3 =
+  "https://utfs.io/f/Hzww9EQvYURJZlINOXaYQrBIUTu69nkMxWmS4ah0O7LVCp8b";
+export const IMG_REGISTRATIN_STEP4 =
+  "https://utfs.io/f/Hzww9EQvYURJqppFvGcdkOZgJQ8mGRcdx3SsWvPelyYFTt5V";
+export const IMG_REGISTRATIN_STEP5 =
+  "https://utfs.io/f/Hzww9EQvYURJ56sDpz797jl4ubX8xrRqTZasyMp2WA5eLGUP";
+export const IMG_REGISTRATIN_STEP6 =
+  "https://utfs.io/f/Hzww9EQvYURJwm1XDCT2j854CWbaITZyegfXimvd7s16cO0h";
+export const IMG_REGISTRATIN_STEP7 =
+  "https://utfs.io/f/Hzww9EQvYURJQU7pvzjhzBPya1rwfCIqOTU0cV5xgsMeo3u2";
+export const IMG_REGISTRATIN_STEP8 =
+  "https://utfs.io/f/Hzww9EQvYURJ8B9jC0rkkp45TvAnoIBa0rtCf1lbyXYjVKQ2";
+export const IMG_REGISTRATIN_STEP9 =
+  "https://utfs.io/f/Hzww9EQvYURJnjHXr3mojJ0EqeDCvBrNmZaXVdY97gSpOWiA";
+
 export const IMG_BADGE_PVPKILLS =
   "https://utfs.io/f/Hzww9EQvYURJyPU0OdukVH2MI5Lo4ehEfAXvZdcmtWqPg7rp";
 export const IMG_BADGE_ARENAKILLS =
@@ -662,6 +704,8 @@ export const IMG_LAYOUT_USERBANNER_MIDDLE =
   "https://utfs.io/f/Hzww9EQvYURJ6sgzOzDfT5pyNCaUruzhPtAJqb8Kj9mc1nlH";
 export const IMG_LAYOUT_SIDESCROLL =
   "https://utfs.io/f/Hzww9EQvYURJAElfIGoZUC4muiGcQNzjfEndY5y1w20B8hTW";
+export const IMG_LAYOUT_MOBILE_TOP =
+  "https://utfs.io/f/Hzww9EQvYURJHTt3S9QvYURJhgs76VZtf9wxpMa13Cq0iOnr";
 export const IMG_LAYOUT_SIDETOPBANNER_CONTENT =
   "https://utfs.io/f/Hzww9EQvYURJOG9gcTWVHevxIThUauQkGJEBY3D2cPqy8f5s";
 export const IMG_LAYOUT_SIDETOPBANNER_BOTTOM =
@@ -675,7 +719,8 @@ export const IMG_LAYOUT_USERSBANNER_BOTTOM =
 export const IMG_AVATAR_DEFAULT =
   "https://utfs.io/f/630cf6e7-c152-4dea-a3ff-821de76d7f5a_default.webp";
 export const IMG_WALLPAPER_WINTER =
-  "https://utfs.io/f/Hzww9EQvYURJwpxgkdT2j854CWbaITZyegfXimvd7s16cO0h";
+  "https://tnr-storage-cdn.b-cdn.net/wallpaper-winter-compressed.webp";
+// "https://utfs.io/f/Hzww9EQvYURJTUQ6Nm5IU29dZYJPoOKSh5vmlqatMub3EigH";
 export const IMG_WALLPAPER_SPRING =
   "https://utfs.io/f/Hzww9EQvYURJYq2fE0OMAlNnPZ41ev6fCGcFK3hmjX9I8W7d";
 export const IMG_WALLPAPER_SUMMER =
@@ -695,7 +740,8 @@ export const IMG_LAYOUT_HANDSIGN =
 export const IMG_LAYOUT_HANDSIGN_HALLOWEEN =
   "https://utfs.io/f/Hzww9EQvYURJcGYTUXSnxBpQqGNDcTHbLmYz8uXAl3oa54ti";
 export const IMG_LAYOUT_WELCOME_IMG =
-  "https://utfs.io/f/Hzww9EQvYURJSuVdlu3jWrEB7TyZlmpoAxMK5Qi16kNPVJuH";
+  "https://tnr-storage-cdn.b-cdn.net/welcomeimage_compressed.webp";
+// "https://utfs.io/f/Hzww9EQvYURJqbkFzRdkOZgJQ8mGRcdx3SsWvPelyYFTt5Vn";
 export const IMG_LOGO_FULL =
   "https://utfs.io/f/Hzww9EQvYURJ8b0eqBkkp45TvAnoIBa0rtCf1lbyXYjVKQ2q";
 export const IMG_LOGO_SHORT =
