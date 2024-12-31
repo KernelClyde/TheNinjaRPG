@@ -128,14 +128,14 @@ export default function Users() {
       <Table
         data={allUsers}
         columns={columns}
-        linkPrefix="/users/"
-        linkColumn={"userId"}
+        linkPrefix="/username/"
+        linkColumn={"username"}
         setLastElement={setLastElement}
         buttons={[
           {
             label: <ExternalLink className="h-5 w-5" />,
             onClick: (user: User) => {
-              window.open(`/users/${user.userId}`, "_blank");
+              window.open(`/userid/${user.userId}`, "_blank");
             },
           },
         ]}

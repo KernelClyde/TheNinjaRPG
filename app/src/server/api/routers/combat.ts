@@ -580,7 +580,7 @@ export const combatRouter = createTRPCRouter({
         asset: z.enum(["ocean", "ground", "dessert", "ice"]).optional(),
       }),
     )
-    .output(baseServerResponse)
+    .output(baseServerResponse.extend({ battleId: z.string().optional() }))
     .mutation(async ({ input, ctx }) => {
       return await initiateBattle(
         {
@@ -1005,7 +1005,6 @@ export const initiateBattle = async (
         pveFights: !["SPARRING", "COMBAT"].includes(battleType)
           ? sql`${userData.pveFights} + 1`
           : sql`${userData.pveFights}`,
-        updatedAt: new Date(),
         immunityUntil: ["SPARRING", "COMBAT"].includes(battleType)
           ? sql`CASE WHEN userId IN (${userIds.join(", ")}) THEN NOW() ELSE immunityUntil END`
           : sql`immunityUntil`,
@@ -1072,7 +1071,7 @@ export const initiateBattle = async (
   // Hide users on map when in combat
   if (!["KAGE_CHALLENGE", "CLAN_CHALLENGE"].includes(battleType)) {
     users.forEach((user) => {
-      void pusher.trigger(user.userId, "event", { type: "battle" });
+      void pusher.trigger(user.userId, "event", { type: "battle", battleId });
       void updateUserOnMap(pusher, user.sector, { ...user, sector: -1 });
     });
   }

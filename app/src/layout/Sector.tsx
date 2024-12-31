@@ -20,7 +20,7 @@ import { useRouter } from "next/navigation";
 import { PathCalculator, findHex } from "@/libs/hexgrid";
 import { OrbitControls } from "@/libs/threejs/OrbitControls";
 import { getBackgroundColor } from "@/libs/travel/biome";
-import { cleanUp, setupScene } from "@/libs/travel/util";
+import { cleanUp, setupScene, setRaycasterFromMouse } from "@/libs/travel/util";
 import { drawSector, drawVillage, drawUsers, drawQuest } from "@/libs/travel/sector";
 import { intersectUsers } from "@/libs/travel/sector";
 import { intersectTiles } from "@/libs/travel/sector";
@@ -33,6 +33,7 @@ import { round } from "@/utils/math";
 import { sleep } from "@/utils/time";
 import { findVillageUserRelationship } from "@/utils/alliance";
 import { isQuestObjectiveAvailable } from "@/libs/objectives";
+import { SECTOR_LENGTH_TO_WIDTH } from "@/libs/travel/constants";
 import { RANKS_RESTRICTED_FROM_PVP } from "@/drizzle/constants";
 import { IMG_SECTOR_INFO, IMG_SECTOR_ATTACK, IMG_ICON_MOVE } from "@/drizzle/constants";
 import type { UserWithRelations } from "@/server/api/routers/profile";
@@ -83,7 +84,7 @@ const Sector: React.FC<SectorProps> = (props) => {
   const utils = api.useUtils();
 
   // Data from db
-  const { data: userData, pusher } = useRequiredUserData();
+  const { data: userData, pusher, updateUser } = useRequiredUserData();
   const { data } = api.travel.getSectorData.useQuery(
     { sector: sector },
     { enabled: sector !== undefined },
@@ -141,15 +142,17 @@ const Sector: React.FC<SectorProps> = (props) => {
   };
 
   const { mutate: checkQuest } = api.quests.checkLocationQuest.useMutation({
-    onSuccess: async (data) => {
-      if (data.success) {
-        data.notifications.forEach((notification) => {
+    onSuccess: async (result) => {
+      if (result.success) {
+        result.notifications.forEach((notification) => {
           showMutationToast({
             success: true,
             message: notification,
           });
         });
-        await utils.profile.getUser.invalidate();
+        if (result.questData && result.updateAt) {
+          await updateUser({ questData: result.questData, updatedAt: result.updateAt });
+        }
         await utils.item.getUserItems.invalidate();
       }
     },
@@ -217,7 +220,7 @@ const Sector: React.FC<SectorProps> = (props) => {
       }
       // If success with data, then we moved
       const data = res.data;
-      if (res.success && data && pathFinder.current && origin.current) {
+      if (userData && res.success && data && pathFinder.current && origin.current) {
         // Get the path the user moved
         const target = findHex(grid.current, { x: data.longitude, y: data.latitude });
         if (!target) return;
@@ -238,7 +241,12 @@ const Sector: React.FC<SectorProps> = (props) => {
           setPosition({ x: tile.col, y: tile.row });
           setMoves((prev) => prev + 1);
           if (data.location !== userData?.location) {
-            await utils.profile.getUser.invalidate();
+            await updateUser({
+              location: data.location,
+              updatedAt: new Date(),
+              longitude: tile.col,
+              latitude: tile.row,
+            });
           }
           await sleep(50);
         }
@@ -275,7 +283,11 @@ const Sector: React.FC<SectorProps> = (props) => {
   const { mutate: attack, isPending: isAttacking } = api.combat.attackUser.useMutation({
     onSuccess: async (data) => {
       if (data.success) {
-        await utils.profile.getUser.invalidate();
+        await updateUser({
+          status: "BATTLE",
+          battleId: data.battleId,
+          updatedAt: new Date(),
+        });
       } else {
         showMutationToast({
           success: false,
@@ -297,7 +309,7 @@ const Sector: React.FC<SectorProps> = (props) => {
     if (pusher) {
       const channel = pusher.subscribe(props.sector.toString());
       channel.bind("event", (data: UserData) => {
-        if (data.userId !== userData?.userId) {
+        if (data.userId && data.userId !== userData?.userId) {
           void updateUsersList(data);
         }
       });
@@ -371,12 +383,9 @@ const Sector: React.FC<SectorProps> = (props) => {
   useEffect(() => {
     const sceneRef = mountRef.current;
     if (sceneRef && userRef.current && fetchedUsers !== undefined) {
-      // Used for map size calculations
-      const hexagonLengthToWidth = 0.885;
-
       // Map size
       const WIDTH = sceneRef.getBoundingClientRect().width;
-      const HEIGHT = WIDTH * hexagonLengthToWidth;
+      const HEIGHT = WIDTH * SECTOR_LENGTH_TO_WIDTH;
 
       // Performance monitor
       // const stats = new Stats();
@@ -397,7 +406,7 @@ const Sector: React.FC<SectorProps> = (props) => {
         sortObjects: false,
         color: color,
         colorAlpha: 1,
-        width2height: hexagonLengthToWidth,
+        width2height: SECTOR_LENGTH_TO_WIDTH,
       });
 
       // If no renderer, then we have an error with the browser, let the user know
@@ -470,7 +479,9 @@ const Sector: React.FC<SectorProps> = (props) => {
       scene.add(group_users);
 
       // Capture clicks to update move direction
-      const onClick = () => {
+      const onClick = (e: MouseEvent) => {
+        // Find intersects with the scene
+        setRaycasterFromMouse(raycaster, sceneRef, e, camera);
         const intersects = raycaster.intersectObjects(scene.children);
         intersects
           .filter((i) => i.object.visible)
@@ -505,7 +516,7 @@ const Sector: React.FC<SectorProps> = (props) => {
               return false;
             } else if (showUsers.current && i.object.userData.type === "info") {
               const userId = i.object.userData.userId as string;
-              void router.push(`/users/${userId}`);
+              void router.push(`/userid/${userId}`);
               return false;
             } else if (showUsers.current && i.object.userData.type === "marker") {
               return true;
@@ -593,7 +604,6 @@ const Sector: React.FC<SectorProps> = (props) => {
         if (sceneRef.contains(renderer.domElement)) {
           sceneRef.removeChild(renderer.domElement);
         }
-        void utils.profile.getUser.invalidate();
       };
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -755,7 +765,7 @@ const SorroundingUsers: React.FC<SorroundingUsersProps> = (props) => {
                 )}
               </div>
               <div className="absolute left-0 top-0 z-50 w-1/3 hover:opacity-80  hover:cursor-pointer">
-                <Link href={`/users/${user.userId}`}>
+                <Link href={`/userid/${user.userId}`}>
                   <Image
                     src={IMG_SECTOR_INFO}
                     width={40}

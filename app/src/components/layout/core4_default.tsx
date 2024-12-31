@@ -12,17 +12,25 @@ import NavTabs from "@/layout/NavTabs";
 import AvatarImage from "@/layout/Avatar";
 import SendTicketBtn from "@/layout/SendTicketButton";
 import { SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
+import { CircleUserRound, Inbox, Compass, Cog, Milk } from "lucide-react";
 import { Megaphone, Info, ShieldAlert, ShieldCheck, Eclipse } from "lucide-react";
 import { Earth, House, MessageCircleWarning } from "lucide-react";
 import { useGameMenu, getMainNavbarLinks } from "@/libs/menus";
 import { useUserData } from "@/utils/UserContext";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetHeader, SheetTrigger } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetTitle,
+  SheetHeader,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { SiGithub, SiDiscord } from "@icons-pack/react-simple-icons";
 import { api } from "@/app/_trpc/client";
 import { showUserRank } from "@/libs/profile";
 import { useUser } from "@clerk/nextjs";
 import { getCurrentSeason } from "@/utils/time";
+import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
 import {
   IMG_WALLPAPER_WINTER,
   IMG_WALLPAPER_SPRING,
@@ -36,6 +44,7 @@ import {
   IMG_ICON_GITHUB,
   IMG_ICON_GOOGLE,
   IMG_LAYOUT_NAVBAR,
+  IMG_LAYOUT_MOBILE_TOP,
   IMG_LAYOUT_NAVBAR_HALLOWEEN,
   IMG_LAYOUT_HANDSIGN,
   IMG_LAYOUT_HANDSIGN_HALLOWEEN,
@@ -56,8 +65,11 @@ export interface LayoutProps {
 
 const LayoutCore4: React.FC<LayoutProps> = (props) => {
   // Prefetching
-  ReactDOM.prefetchDNS("https://o4507797256601600.ingest.de.sentry.io");
+  // ReactDOM.prefetchDNS("https://o4507797256601600.ingest.de.sentry.io");
   ReactDOM.prefetchDNS("https://consentcdn.cookiebot.com");
+  ReactDOM.prefetchDNS("https://region1.analytics.google.com");
+  ReactDOM.prefetchDNS("https://connect.facebook.net");
+  ReactDOM.prefetchDNS("https://api.github.com");
 
   // Get data
   const { data: userData, timeDiff, notifications } = useUserData();
@@ -70,6 +82,7 @@ const LayoutCore4: React.FC<LayoutProps> = (props) => {
 
   // Derived data for layout
   const navbarMenuItems = getMainNavbarLinks();
+  const shownNotifications = notifications?.filter((n) => n.color !== "toast");
 
   // Split menu into two parts
   const navbarMenuItemsLeft = navbarMenuItems.slice(0, 3);
@@ -131,7 +144,7 @@ const LayoutCore4: React.FC<LayoutProps> = (props) => {
     <>
       <SignedIn>
         <RightSideBar
-          notifications={notifications}
+          notifications={shownNotifications}
           systems={systems}
           userData={userData}
           location={location}
@@ -201,7 +214,11 @@ const LayoutCore4: React.FC<LayoutProps> = (props) => {
           }}
         />
       </SignedIn>
-      <Link href="/event" onClick={() => setLeftSideBarOpen(false)}>
+      <Link
+        href="/event"
+        onClick={() => setLeftSideBarOpen(false)}
+        aria-label="Event Notifications"
+      >
         <Megaphone className="h-7 w-7 hover:text-black hover:bg-blue-300 text-slate-700 bg-blue-100 bg-opacity-80 rounded-full mx-1 ml-2 p-1" />
       </Link>
       <Eclipse
@@ -221,10 +238,10 @@ const LayoutCore4: React.FC<LayoutProps> = (props) => {
   );
 
   return (
-    <div className="w-full">
-      <div className="fixed right-5 bottom-5 z-50 bg-slate-500 rounded-full">
+    <div className="w-full absolute top-0 bottom-0 md:relative">
+      <div className="fixed right-1 bottom-1 md:right-5 md:bottom-5 z-50 bg-slate-500 rounded-full">
         <SendTicketBtn>
-          <MessageCircleWarning className="h-16 w-16 bg-yellow-500 hover:bg-yellow-300 transition-colors text-orange-100 rounded-full p-2 shadow-md shadow-black border-2" />
+          <MessageCircleWarning className="h-16 w-16 bg-yellow-500 hover:bg-yellow-300 transition-colors text-orange-100 rounded-full p-2 shadow-md shadow-red-800 md:shadow-black border-2 hidden md:block" />
         </SendTicketBtn>
       </div>
       {/* WALLPAPER BACKGROUND */}
@@ -238,7 +255,7 @@ const LayoutCore4: React.FC<LayoutProps> = (props) => {
         priority
         unoptimized
       />
-      <div className="max-w-[1280px] ml-auto mr-auto w-auto h-auto">
+      <div className="max-w-[1280px] ml-auto mr-auto w-full absolute top-0 bottom-0 md:relative">
         {/* LOGO */}
         <Link href="/">
           <Image
@@ -313,7 +330,11 @@ const LayoutCore4: React.FC<LayoutProps> = (props) => {
           alt="handsign"
           loading="lazy"
         />
-        <div className="relative top-[100px] md:top-[-122px] flex flex-row z-10">
+        <div
+          className={`relative top-[100px] h-[15px] w-full shrink-0 bg-fill bg-repeat-x md:hidden`}
+          style={{ backgroundImage: `url(${IMG_LAYOUT_MOBILE_TOP})` }}
+        ></div>
+        <div className="relative top-[100px] md:top-[-122px] flex flex-row z-10 h-full">
           {/* LEFT SIDEBANNER DESKTOP */}
           <div className="hidden md:block relative w-[200px] lg:w-[250px] shrink-0">
             <div className="relative">
@@ -339,21 +360,21 @@ const LayoutCore4: React.FC<LayoutProps> = (props) => {
             <StrongestUsersBanner />
           </div>
           {/* MAIN CONTENT */}
-          <div className="w-full flex-1 min-w-0 flex flex-col">
-            <div className="w-full flex flex-row">
+          <div className="w-full flex-1 min-w-0 flex flex-col ">
+            <div className="w-full flex flex-row min-h-screen md:min-h-0">
               <div
                 className={`w-12 shrink-0 bg-fill bg-repeat-y hidden lg:block`}
                 style={{ backgroundImage: `url(${IMG_LAYOUT_SIDESCROLL})` }}
               ></div>
-              <div className="w-full bg-background bg-opacity-50 md:bg-opacity-100 grow flex flex-col overflow-x-scroll min-h-[200px]">
-                <div className="p-3">{props.children}</div>
+              <div className="w-full bg-background grow flex flex-col overflow-x-scroll min-h-[200px]">
+                <div className="p-3 pb-28 md:pb-3">{props.children}</div>
               </div>
               <div
                 className={`w-12 shrink-0 bg-fill bg-repeat-y hidden lg:block`}
                 style={{ backgroundImage: `url(${IMG_LAYOUT_SIDESCROLL})` }}
               ></div>
             </div>
-            <div className="h-20 max-h-28 flex flex-col relative">
+            <div className="h-20 max-h-28 flex flex-col fixed bottom-0  w-full md:relative">
               <div className="absolute top-0 left-[-20px] right-0 md:right-[-20px] -z-30">
                 <div className="h-5 bg-gradient-to-b from-rose-950 to-rose-800"></div>
                 <div className="h-8 bg-rose-800"></div>
@@ -375,9 +396,78 @@ const LayoutCore4: React.FC<LayoutProps> = (props) => {
                 alt="rightbottomdecor"
                 loading="lazy"
               ></Image>
-              <div className="absolute top-4 left-0 right-0">
+              <div className="absolute top-4 left-0 right-0 hidden md:block">
                 <Footer />
               </div>
+              {userData ? (
+                <div className="absolute top-0 left-0 right-0 bottom-0 md:hidden grid grid-cols-5 items-center justify-center">
+                  <Link
+                    href="/profile"
+                    className="flex justify-center -top-2 relative"
+                    prefetch={true}
+                  >
+                    <CircleUserRound className="h-16 w-16  hover:bg-slate-500 transition-colors text-orange-100 bg-opacity-50 rounded-full p-2  " />
+                  </Link>
+                  <Link
+                    href="/inbox"
+                    className="flex justify-center -top-2 relative"
+                    prefetch={true}
+                  >
+                    <Inbox className="h-16 w-16  hover:bg-slate-500 transition-colors text-orange-100 bg-opacity-50 rounded-full p-2  " />
+                  </Link>
+                  {location ? (
+                    <>
+                      <Link
+                        href="/village"
+                        className="flex justify-center -top-8 relative"
+                        prefetch={true}
+                      >
+                        <div className="p-4 bg-gradient-to-b from-black/5 to-black/50 rounded-full">
+                          <House className="h-16 w-16 bg-yellow-500 hover:bg-yellow-700 transition-colors text-white rounded-full p-2 border-2 " />
+                        </div>
+                      </Link>
+                      <Link
+                        href="/travel"
+                        className="flex justify-center -top-2 relative"
+                        prefetch={true}
+                      >
+                        <Compass className="h-16 w-16  hover:bg-slate-500 transition-colors text-orange-100 bg-opacity-50 rounded-full p-2  " />
+                      </Link>
+                    </>
+                  ) : (
+                    <>
+                      <Link
+                        href="/travel"
+                        className="flex justify-center -top-8 relative"
+                        prefetch={true}
+                      >
+                        <div className="p-4 bg-gradient-to-b from-black/5 to-black/50 rounded-full">
+                          <Compass className="h-16 w-16 bg-yellow-500 hover:bg-yellow-700 transition-colors text-white rounded-full p-2 border-2 " />
+                        </div>
+                      </Link>
+                      <Link
+                        href="/items"
+                        className="flex justify-center -top-2 relative"
+                        prefetch={true}
+                      >
+                        <Milk className="h-16 w-16  hover:bg-slate-500 transition-colors text-orange-100 bg-opacity-50 rounded-full p-2  " />
+                      </Link>
+                    </>
+                  )}
+
+                  <Link
+                    href="/profile/edit"
+                    className="flex justify-center -top-2 relative"
+                    prefetch={true}
+                  >
+                    <Cog className="h-16 w-16  hover:bg-slate-500 transition-colors text-orange-100 bg-opacity-50 rounded-full p-2  " />
+                  </Link>
+                </div>
+              ) : (
+                <div className="absolute top-4 left-0 right-0 block md:hidden">
+                  <Footer />
+                </div>
+              )}
             </div>
           </div>
           {/* RIGHT SIDEBANNER DESKTOP */}
@@ -406,12 +496,14 @@ const LayoutCore4: React.FC<LayoutProps> = (props) => {
         </div>
         {/* LEFT SIDEBAR MOBILE */}
         <Sheet open={leftSideBarOpen} onOpenChange={setLeftSideBarOpen}>
-          <SheetTrigger className="absolute top-4 left-4" id="homeBtn">
+          <SheetTrigger className="absolute top-4 left-4" aria-label="homeBtn">
             <House className="block md:hidden h-16 w-16 bg-yellow-500 hover:bg-yellow-300 transition-colors text-orange-100 rounded-full p-2 shadow-md shadow-black border-2" />
           </SheetTrigger>
           <SheetContent side="left">
             <SheetHeader className="text-left">
-              <SideBannerTitle>Main Menu</SideBannerTitle>
+              <SheetTitle>
+                <SideBannerTitle>Main Menu</SideBannerTitle>
+              </SheetTitle>
               <div className="mt-1 grid gap-3 grid-cols-2">
                 {navbarMenuItems.map((system, i) => {
                   return (
@@ -442,13 +534,38 @@ const LayoutCore4: React.FC<LayoutProps> = (props) => {
 
         {/* RIGHT SIDEBAR MOBILE */}
         <Sheet open={rightSideBarOpen} onOpenChange={setRightSideBarOpen}>
-          <SheetTrigger className="absolute top-4 right-4" id="gameBtn">
+          <SheetTrigger className="absolute top-4 right-4" aria-label="gameBtn">
             <Earth className="block md:hidden h-16 w-16 bg-yellow-500 hover:bg-yellow-300 transition-colors text-orange-100 rounded-full p-2 shadow-md shadow-black border-2" />
           </SheetTrigger>
           <SheetContent onClick={() => setRightSideBarOpen(false)}>
+            <VisuallyHidden.Root>
+              <SheetTitle>Test</SheetTitle>
+            </VisuallyHidden.Root>
             <SheetHeader>{rightSideBar}</SheetHeader>
           </SheetContent>
         </Sheet>
+
+        {/* MOBILE NOTIFICATIONS */}
+        <div className="absolute top-[75px] right-0 left-0 flex flex-row justify-end md:hidden p-1 gap-2">
+          {shownNotifications?.map((notification, i) => (
+            <Link key={i} href={notification.href}>
+              <div
+                className={`flex flex-row text-xs items-center rounded-lg border-2 border-slate-800 py-[1px] px-3 hover:opacity-70 ${
+                  notification.color ? `bg-${notification.color}-600` : "bg-slate-500"
+                }`}
+              >
+                {notification.color === "red" && (
+                  <ShieldAlert className="mr-1 h-5 w-5" />
+                )}
+                {notification.color === "blue" && <Info className="mr-1 h-5 w-5" />}
+                {notification.color === "green" && (
+                  <ShieldCheck className="mr-1 h-5 w-5" />
+                )}
+                {notification.name}
+              </div>
+            </Link>
+          ))}
+        </div>
         {/* <div className="p-3 pt-24 min-h-[1200px] bg-background bg-opacity-50">
           {props.children}
         </div> */}
@@ -503,7 +620,11 @@ const StrongestUsersBanner: React.FC = () => {
               className="text-orange-100 hover:text-orange-300"
             />
             {users?.map((user, i) => (
-              <Link href={`/users/${user.userId}`} key={i} className="hover:opacity-50">
+              <Link
+                href={`/username/${user.username}`}
+                key={i}
+                className="hover:opacity-50"
+              >
                 <div
                   className={`py-1 grid grid-cols-12 items-center justify-center relative top-2 left-8 lg:left-10 w-[154px] max-w-[154px] lg:w-[200px] lg:max-w-[200px] ${
                     i % 2 == 0 ? "bg-pink-900" : ""
@@ -585,20 +706,17 @@ const RightSideBar: React.FC<{
   // Derived data
   const inBattle = userData?.status === "BATTLE";
 
-  // Shown notifications
-  const shownNotifications = notifications?.filter((n) => n.color !== "toast");
-
   // Render
   return (
     <>
       {/* COMBAT */}
       <MenuBoxCombat />
       {/* NOTIFICATIONS */}
-      {userData && shownNotifications && shownNotifications.length > 0 && (
+      {userData && notifications && notifications.length > 0 && (
         <>
           <SideBannerTitle>Notifications</SideBannerTitle>
           <ul className="grid grid-cols-1 gap-[1px]">
-            {shownNotifications.map((notification, i) => (
+            {notifications.map((notification, i) => (
               <Link key={i} href={notification.href}>
                 <div
                   className={`flex flex-row text-xs lg:text-base items-center rounded-lg border-2 border-slate-800 py-[1px] pl-3 hover:opacity-70 ${

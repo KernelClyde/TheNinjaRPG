@@ -13,7 +13,7 @@ import { lockWithGameTimer, handleEndpointError } from "@/libs/gamesettings";
 
 export async function GET() {
   // disable cache for this server action (https://github.com/vercel/next.js/discussions/50045)
-  cookies();
+  await cookies();
 
   // Check timer
   const response = await lockWithGameTimer(drizzleDB, 1, "h", "transaction-sync");
@@ -59,7 +59,7 @@ export async function GET() {
         and(
           gt(mainTransaction.reputationPoints, 0),
           gt(mainTransaction.amount, 0),
-          eq(mainTransaction.status, "REP_PURCHASE"),
+          eq(mainTransaction.type, "REP_PURCHASE"),
           isNotNull(buyerUser.recruiterId),
           isNull(refTransaction.id),
         ),

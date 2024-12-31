@@ -258,6 +258,8 @@ const ReputationStore = (props: { currency: string }) => {
                         {
                           item_id: "BASIC_REPS",
                           item_name: "REPUTATION POINTS",
+                          price: Number(value),
+                          quantity: 1,
                         },
                       ],
                     });
@@ -772,7 +774,7 @@ export const TransactionHistory: React.FC<{ userId: string }> = (props) => {
       <Table
         data={allTransactions}
         columns={columns}
-        linkPrefix="/users/"
+        linkPrefix="/userid/"
         setLastElement={setLastElement}
       />
     </ContentBox>

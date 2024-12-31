@@ -10,7 +10,7 @@ import { drawCombatBackground, drawCombatEffects } from "@/libs/combat/drawing";
 import { OrbitControls } from "@/libs/threejs/OrbitControls";
 import { COMBAT_SECONDS, COMBAT_LOBBY_SECONDS } from "@/libs/combat/constants";
 import { SpriteMixer } from "@/libs/threejs/SpriteMixer";
-import { cleanUp, setupScene } from "@/libs/travel/util";
+import { cleanUp, setupScene, setRaycasterFromMouse } from "@/libs/travel/util";
 import { highlightTiles } from "@/libs/combat/drawing";
 import { highlightTooltips } from "@/libs/combat/drawing";
 import { highlightUsers } from "@/libs/combat/drawing";
@@ -66,7 +66,7 @@ const Combat: React.FC<CombatProps> = (props) => {
 
   // Data from the DB
   const setBattleAtom = useSetAtom(userBattleAtom);
-  const { data: userData, pusher, timeDiff } = useRequiredUserData();
+  const { data: userData, pusher, timeDiff, updateUser } = useRequiredUserData();
   const [statDistribution] = useLocalStorage<StatSchemaType | undefined>(
     "statDistribution",
     undefined,
@@ -115,18 +115,22 @@ const Combat: React.FC<CombatProps> = (props) => {
 
   // Mutation for starting a fight
   const { mutate: startArenaBattle } = api.combat.startArenaBattle.useMutation({
-    onSuccess: async (data) => {
-      if (data.success) {
+    onSuccess: async (result) => {
+      if (result.success && result.battleId) {
         showMutationToast({
-          success: data.success,
+          success: result.success,
           message: "You enter the arena again",
         });
         setBattleAtom(undefined);
         setBattleState({ battle: undefined, result: null, isPending: true });
+        await updateUser({
+          status: "BATTLE",
+          battleId: result.battleId,
+          updatedAt: new Date(),
+        });
         await utils.combat.getBattle.invalidate();
-        await utils.profile.getUser.invalidate();
       } else {
-        showMutationToast(data);
+        showMutationToast(result);
       }
     },
   });
@@ -406,7 +410,8 @@ const Combat: React.FC<CombatProps> = (props) => {
       scene.add(group_effects);
 
       // Capture clicks to update move direction
-      const onClick = () => {
+      const onClick = (e: MouseEvent) => {
+        setRaycasterFromMouse(raycaster, sceneRef, e, camera);
         const intersects = raycaster.intersectObjects(scene.children);
         intersects
           .filter((i) => i.object.visible)
