@@ -7,6 +7,7 @@ import type { GroundEffect, UserEffect, ActionEffect } from "./types";
 import type { StatNames, GenNames, DmgConfig } from "./constants";
 import type { DamageTagType, PierceTagType } from "@/libs/combat/types";
 import type { WeaknessTagType } from "@/libs/combat/types";
+import type { ShieldTagType } from "@/libs/combat/types";
 import type { GeneralType } from "@/drizzle/constants";
 import type { BattleType } from "@/drizzle/constants";
 import { capitalizeFirstLetter } from "@/utils/sanitize";
@@ -85,9 +86,6 @@ export const buffPrevent = (
   if (mainCheck) {
     const info = getInfo(target, effect, "cannot be buffed");
     effect.power = 100;
-    if (effect.isNew && effect.rounds) {
-      effect.rounds -= 1;
-    }
     return info;
   } else if (effect.isNew) {
     effect.rounds = 0;
@@ -108,9 +106,6 @@ export const debuffPrevent = (
   if (mainCheck) {
     const info = getInfo(target, effect, "cannot be debuffed");
     effect.power = 100;
-    if (effect.isNew && effect.rounds) {
-      effect.rounds -= 1;
-    }
     return info;
   } else if (effect.isNew) {
     effect.rounds = 0;
@@ -347,6 +342,16 @@ export const adjustDamageGiven = (
             effect.calculation === "percentage"
               ? (power / 100) * consequence.damage
               : power;
+          if (effect.fromType === "bloodline") {
+            if (
+              "allowBloodlineDamageIncrease" in damageEffect &&
+              "allowBloodlineDamageDecrease" in damageEffect &&
+              ((change > 0 && !damageEffect.allowBloodlineDamageIncrease) ||
+                (change < 0 && !damageEffect.allowBloodlineDamageDecrease))
+            ) {
+              return;
+            }
+          }
           consequence.damage = consequence.damage + change * ratio;
         }
       }
@@ -557,7 +562,8 @@ const removeEffects = (
       });
 
     // Type guard to identify ground effects
-    const isGroundEffect = (e: UserEffect | GroundEffect): e is GroundEffect => !("targetId" in e);
+    const isGroundEffect = (e: UserEffect | GroundEffect): e is GroundEffect =>
+      !("targetId" in e);
 
     // Remove ground effects at the same location as the target
     usersEffects
@@ -906,7 +912,20 @@ export const flee = (
       : "";
   if (primaryCheck) {
     target.fledBattle = true;
-    text = `${target.username} manages to flee the battle!`;
+    // If the player successfully flees, handle money based on whether they were robbed or robbed others
+    if (target.moneyStolen < 0) {
+      // This player was robbed - restore their money
+      target.money -= target.moneyStolen; // Add back the stolen money (moneyStolen is negative)
+      target.moneyStolen = 0;
+      text = `${target.username} manages to flee the battle and recovers their stolen money!`;
+    } else if (target.moneyStolen > 0) {
+      // This player robbed others - they lose the stolen money when fleeing
+      target.money -= target.moneyStolen;
+      target.moneyStolen = 0;
+      text = `${target.username} manages to flee the battle but drops all the stolen money!`;
+    } else {
+      text = `${target.username} manages to flee the battle!`;
+    }
   } else {
     text += `${target.username} fails to flee the battle!`;
   }
@@ -941,8 +960,10 @@ export const heal = (
   applyTimes: number,
 ) => {
   // Prevent?
-  const { pass } = preventCheck(usersEffects, "healprevent", target);
-  if (!pass) return preventResponse(effect, target, "cannot be healed");
+  const { pass, preventTag } = preventCheck(usersEffects, "healprevent", target);
+  if (preventTag && preventTag.createdRound < effect.createdRound) {
+    if (!pass) return preventResponse(effect, target, "cannot be healed");
+  }
   // Calculate healing
   const { power } = getPower(effect);
   const parsedEffect = HealTag.parse(effect);
@@ -1120,6 +1141,29 @@ export const lifesteal = (
   return getInfo(target, effect, `will steal ${qualifier} damage as health`);
 };
 
+/** Create a temporary HP shield that absorbs damage */
+export const shield = (effect: UserEffect, target: BattleUserState) => {
+  // Apply
+  const { power } = getPower(effect);
+  const primaryCheck = Math.random() < power / 100;
+  const shieldEffect = effect as ShieldTagType;
+  let info: ActionEffect | undefined = undefined;
+  if (effect.isNew && effect.rounds) {
+    if (primaryCheck) {
+      effect.power = shieldEffect.health;
+      info = getInfo(target, effect, `shield with ${effect.power.toFixed(2)} HP`);
+    } else {
+      effect.rounds = 0;
+      info = { txt: `${target.username}'s shield was not created`, color: "blue" };
+    }
+  }
+  if (effect.power <= 0) {
+    info = { txt: `${target.username}'s shield was destroyed`, color: "red" };
+    effect.rounds = 0;
+  }
+  return info;
+};
+
 /**
  * Move user on the battlefield
  * 1. Remove user from current ground effect
@@ -1263,8 +1307,9 @@ export const rob = (
         let stolen = Math.floor(pocketMoney * (effect.robPercentage / 100));
         stolen = Math.min(stolen, pocketMoney); // Ensure we don't steal more than what's in pocket
         origin.moneyStolen = (origin.moneyStolen || 0) + stolen;
-        target.moneyStolen = (origin.moneyStolen || 0) - stolen;
+        target.moneyStolen = (target.moneyStolen || 0) - stolen;
         target.money -= stolen;
+        origin.money += stolen;
         return {
           txt: `${origin.username} stole ${stolen} ryo from ${target.username}'s pocket`,
           color: "blue",
@@ -1396,6 +1441,26 @@ export const stealth = (effect: UserEffect, target: BattleUserState) => {
   if (mainCheck) {
     const info = getInfo(target, effect, "will be stealthed");
     return info;
+  } else if (effect.isNew) {
+    effect.rounds = 0;
+  }
+};
+
+/** Seal elemental jutsu */
+export const elementalseal = (effect: UserEffect, target: BattleUserState) => {
+  const { power } = getPower(effect);
+  const mainCheck = Math.random() < power / 100;
+  if (mainCheck) {
+    // Check if effect has elements property
+    if ("elements" in effect && effect.elements) {
+      const elements = effect.elements.length > 0 ? effect.elements.join(", ") : "no";
+      const info = getInfo(
+        target,
+        effect,
+        `will be sealed from using ${elements} jutsu`,
+      );
+      return info;
+    }
   } else if (effect.isNew) {
     effect.rounds = 0;
   }
@@ -1686,7 +1751,7 @@ const preventCheck = (
   const preventTag = usersEffects.find(
     (e) => e.type == type && e.targetId === target.userId && !e.castThisRound,
   );
-  if (preventTag) {
+  if (preventTag && (preventTag.rounds === undefined || preventTag.rounds > 0)) {
     const power = preventTag.power + preventTag.level * preventTag.powerPerLevel;
     return { pass: Math.random() > power / 100, preventTag: preventTag };
   }

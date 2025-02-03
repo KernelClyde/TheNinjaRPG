@@ -9,10 +9,11 @@ import { villageAlliance, kageDefendedChallenges } from "@/drizzle/schema";
 import { eq, sql, gte, and, or } from "drizzle-orm";
 import { ramenOptions } from "@/utils/ramen";
 import { getRamenHealPercentage, calcRamenCost } from "@/utils/ramen";
-import { fetchUser, fetchUpdatedUser } from "@/routers/profile";
+import { fetchUpdatedUser } from "@/routers/profile";
 import { fetchRequests } from "@/routers/sparring";
 import { insertRequest, updateRequestState } from "@/routers/sparring";
 import { createConvo } from "@/routers/comments";
+import { canAccessStructure } from "@/utils/village";
 import { structureBoost } from "@/utils/village";
 import { isKage } from "@/utils/kage";
 import { findRelationship } from "@/utils/alliance";
@@ -79,10 +80,19 @@ export const villageRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       // Get structures of current (visiting) village or Sydicate if outlaw
-      const user = await fetchUser(ctx.drizzle, ctx.userId);
-      const village = await fetchSectorVillage(ctx.drizzle, user.sector, user.isOutlaw);
-      const structures = await fetchStructures(ctx.drizzle, village?.id);
-
+      const updatedUser = await fetchUpdatedUser({
+        client: ctx.drizzle,
+        userId: ctx.userId,
+        forceRegen: true,
+      });
+      const user = updatedUser.user;
+      if (!user) return errorResponse("User does not exist");
+      const sectorVillage = await fetchSectorVillage(
+        ctx.drizzle,
+        user.sector,
+        user.isOutlaw,
+      );
+      const structures = await fetchStructures(ctx.drizzle, sectorVillage?.id);
       // Calculate cost
       const discount = structureBoost("ramenDiscountPerLvl", structures);
       const factor = (100 - discount) / 100;
@@ -92,6 +102,10 @@ export const villageRouter = createTRPCRouter({
       if (user.status !== "AWAKE") return errorResponse("You must be awake");
       if (user.money < cost) return errorResponse("You don't have enough money");
       if (user.isBanned) return errorResponse("You are banned");
+      if (!sectorVillage) return errorResponse("Village does not exist");
+      if (!user.isOutlaw && !canAccessStructure(user, "/ramenshop", sectorVillage)) {
+        return errorResponse("Must be in your allied village to buy ramen");
+      }
       // Mutate with guard
       const newHealth = Math.min(
         user.maxHealth,
@@ -119,7 +133,7 @@ export const villageRouter = createTRPCRouter({
       } else {
         return {
           success: true,
-          message: "You have bought food",
+          message: `You have bought food and healed to ${Math.floor(newHealth)}HP, ${Math.floor(newStamina)}SP, and ${Math.floor(newChakra)}CP`,
           cost,
           newHealth,
           newStamina,
@@ -156,7 +170,8 @@ export const villageRouter = createTRPCRouter({
         .update(userData)
         .set({
           villageId: VILLAGE_SYNDICATE_ID,
-          villagePrestige: 0,
+          villagePrestige:
+            user.villagePrestige >= 0 ? user.villagePrestige : -user.villagePrestige, // Converted to notoriety
           isOutlaw: true,
           ...(user.rank === "GENIN" && { senseiId: null }),
           ...(user.rank === "ELDER" && { rank: "JONIN" }),
@@ -251,7 +266,6 @@ export const villageRouter = createTRPCRouter({
           .set({
             villageId: village.id,
             reputationPoints: user.reputationPoints - cost,
-            // villagePrestige: 0,
             isOutlaw: village.type === "OUTLAW" ? true : false,
             sector: village.sector,
             longitude: ALLIANCEHALL_LONG,

@@ -5,9 +5,10 @@ import { availableUserActions, getBasicActions } from "./actions";
 import { calcActiveUser } from "./actions";
 import { stillInBattle } from "./actions";
 import { secondsPassed } from "@/utils/time";
-import { realizeTag } from "./process";
+import { realizeTag, checkFriendlyFire } from "./process";
 import { KAGE_PRESTIGE_COST, FRIENDLY_PRESTIGE_COST } from "@/drizzle/constants";
 import { calcIsInVillage } from "@/libs/travel/controls";
+import { toOffenceStat, toDefenceStat } from "@/libs/stats";
 import { structureBoost } from "@/utils/village";
 import { deduceActiveUserRegen } from "@/libs/profile";
 import { DecreaseDamageTakenTag } from "@/libs/combat/types";
@@ -20,6 +21,7 @@ import { Orientation, Grid, rectangle } from "honeycomb-grid";
 import { defineHex } from "../hexgrid";
 import { actionPointsAfterAction } from "@/libs/combat/actions";
 import { COMBAT_HEIGHT, COMBAT_WIDTH } from "./constants";
+import { KILLING_NOTORIETY_GAIN } from "@/drizzle/constants";
 import type { PathCalculator } from "../hexgrid";
 import type { TerrainHex } from "../hexgrid";
 import type { CombatResult, CompleteBattle, ReturnedBattle } from "./types";
@@ -99,6 +101,20 @@ export const isUserStealthed = (
       e.targetId === userId &&
       !e.castThisRound &&
       "rounds" in e &&
+      e.rounds &&
+      e.rounds > 0,
+  );
+};
+
+export const getUserElementalSeal = (
+  userId: string | undefined,
+  userEffects: UserEffect[] | undefined,
+) => {
+  return userEffects?.find(
+    (e) =>
+      e.type === "elementalseal" &&
+      e.targetId === userId &&
+      !e.castThisRound &&
       e.rounds &&
       e.rounds > 0,
   );
@@ -187,6 +203,7 @@ export const calcApplyRatio = (
     "stealth",
     "summonprevent",
     "weakness",
+    "shield",
   ];
   // If always apply, then apply 1 time, but not if rounds set to 0
   if (alwaysApply.includes(effect.type)) {
@@ -270,6 +287,7 @@ export const sortEffects = (
     "increasestat",
     // Mid-modifiers
     "barrier",
+    "shield",
     "clone",
     "damage",
     "flee",
@@ -556,16 +574,20 @@ export const calcBattleResult = (battle: CompleteBattle, userId: string) => {
       const vilId = user.villageId;
       if (didWin && battleType === "COMBAT" && user.isAggressor) {
         targetUsers.forEach((target) => {
-          // Prestige deduction for killing allies
-          const isAlly = target.relations
-            .filter((r) => r.status === "ALLY")
-            .find(
-              (r) =>
-                (r.villageIdA === vilId && r.villageIdB === target.villageId) ||
-                (r.villageIdA === target.villageId && r.villageIdB === vilId),
-            );
-          const sameVillage = target.villageId === vilId;
-          deltaPrestige -= isAlly || sameVillage ? FRIENDLY_PRESTIGE_COST : 0;
+          if (user.isOutlaw) {
+            deltaPrestige += KILLING_NOTORIETY_GAIN;
+          } else {
+            // Prestige deduction for killing allies
+            const isAlly = target.relations
+              .filter((r) => r.status === "ALLY")
+              .find(
+                (r) =>
+                  (r.villageIdA === vilId && r.villageIdB === target.villageId) ||
+                  (r.villageIdA === target.villageId && r.villageIdB === vilId),
+              );
+            const sameVillage = target.villageId === vilId;
+            deltaPrestige -= isAlly || sameVillage ? FRIENDLY_PRESTIGE_COST : 0;
+          }
 
           // Village tokens for killing enemies
           deltaTokens +=
@@ -766,15 +788,20 @@ export const calcApReduction = (
         !e.castThisRound &&
         isEffectActive(e),
     ) || []),
-    ...(battle?.groundEffects.filter(
-      (e) =>
+    ...(battle?.groundEffects.filter((e) => {
+      // Basic checks for stun effect at user's location
+      const locationMatch =
         e.type === "stun" &&
         e.longitude === user?.longitude &&
         e.latitude === user?.latitude &&
         !e.castThisRound &&
-        isEffectActive(e),
-    ) || []),
-    ,
+        isEffectActive(e);
+
+      if (!locationMatch || !user) return false;
+
+      // Use the existing checkFriendlyFire function to determine if effect should be applied
+      return checkFriendlyFire(e, user, battle.usersState);
+    }) || []),
   ];
   const apReduction = stunEffects?.reduce((acc, e) => {
     if (e && "apReduction" in e) {
@@ -888,9 +915,13 @@ export const processUsersForBattle = (info: {
       bukijutsuOffence: user.bukijutsuOffence,
     };
     type offenceKey = keyof typeof offences;
-    user.highestOffence = Object.keys(offences).reduce((prev, cur) =>
-      offences[prev as offenceKey] > offences[cur as offenceKey] ? prev : cur,
-    ) as offenceKey;
+    if (!user.preferredStat) {
+      user.highestOffence = Object.keys(offences).reduce((prev, cur) =>
+        offences[prev as offenceKey] > offences[cur as offenceKey] ? prev : cur,
+      ) as offenceKey;
+    } else {
+      user.highestOffence = toOffenceStat(user.preferredStat);
+    }
 
     // Starting round
     user.round = 0;
@@ -903,9 +934,13 @@ export const processUsersForBattle = (info: {
       bukijutsuDefence: user.bukijutsuDefence,
     };
     type defenceKey = keyof typeof defences;
-    user.highestDefence = Object.keys(defences).reduce((prev, cur) =>
-      defences[prev as defenceKey] > defences[cur as defenceKey] ? prev : cur,
-    ) as defenceKey;
+    if (!user.preferredStat) {
+      user.highestDefence = Object.keys(defences).reduce((prev, cur) =>
+        defences[prev as defenceKey] > defences[cur as defenceKey] ? prev : cur,
+      ) as defenceKey;
+    } else {
+      user.highestDefence = toDefenceStat(user.preferredStat);
+    }
 
     // Add highest generals to user
     const generals = {
@@ -913,12 +948,37 @@ export const processUsersForBattle = (info: {
       intelligence: user.intelligence,
       willpower: user.willpower,
       speed: user.speed,
-    };
+    } as const;
+
     type generalKey = keyof typeof generals;
-    // The the two highest generals
-    user.highestGenerals = Object.keys(generals)
-      .sort((a, b) => generals[b as generalKey] - generals[a as generalKey])
-      .slice(0, 2) as generalKey[];
+
+    if (user.preferredGeneral1 && user.preferredGeneral2) {
+      // If both generals are already set, just use them
+      user.highestGenerals = [
+        user.preferredGeneral1.toLowerCase(),
+        user.preferredGeneral2.toLowerCase(),
+      ] as generalKey[];
+    } else {
+      // Sort generals by value
+      const sortedStats = Object.entries(generals)
+        .sort(([, a], [, b]) => b - a)
+        .map(([stat]) => stat) as generalKey[];
+
+      if (user.preferredGeneral1) {
+        // If first general is set, find the highest from remaining
+        const firstGenLower = user.preferredGeneral1.toLowerCase() as generalKey;
+        const secondGeneral = sortedStats.find((stat) => stat !== firstGenLower);
+        user.highestGenerals = [firstGenLower, secondGeneral!];
+      } else if (user.preferredGeneral2) {
+        // If second general is set, find the highest from remaining
+        const secondGenLower = user.preferredGeneral2.toLowerCase() as generalKey;
+        const firstGeneral = sortedStats.find((stat) => stat !== secondGenLower);
+        user.highestGenerals = [firstGeneral!, secondGenLower];
+      } else {
+        // If no generals are set, take the two highest
+        user.highestGenerals = sortedStats.slice(0, 2);
+      }
+    }
 
     // By default set iAmHere to false
     user.iAmHere = false;

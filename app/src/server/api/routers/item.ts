@@ -17,7 +17,7 @@ import { calcItemSellingPrice } from "@/libs/item";
 import { ANBU_ITEMSHOP_DISCOUNT_PERC } from "@/drizzle/constants";
 import { nonCombatConsume } from "@/libs/item";
 import { getRandomElement } from "@/utils/array";
-import { calcMaxItems } from "@/libs/item";
+import { calcMaxItems, calcMaxEventItems } from "@/libs/item";
 import { IMG_AVATAR_DEFAULT } from "@/drizzle/constants";
 import { calculateContentDiff } from "@/utils/diff";
 import { HealTag } from "@/libs/combat/types";
@@ -355,6 +355,7 @@ export const itemRouter = createTRPCRouter({
       if (!user) return errorResponse("User not found");
       if (!useritem) return errorResponse("User item not found");
       if (useritem.userId !== user.userId) return errorResponse("Not yours to consume");
+      if (user.status !== "AWAKE") return errorResponse(`Cannot use items while ${user.status.toLowerCase()}`);
       if (!nonCombatConsume(useritem.item, user)) {
         return errorResponse("Not consumable");
       }
@@ -522,7 +523,8 @@ export const itemRouter = createTRPCRouter({
         fetchStructures(ctx.drizzle, input.villageId),
       ]);
       // Derived
-      const userItemsCount = useritems?.length || 0;
+      const regularItemsCount = useritems?.filter((ui) => !ui.item.isEventItem).length || 0;
+      const eventItemsCount = useritems?.filter((ui) => ui.item.isEventItem).length || 0;
       const sDiscount = structureBoost("itemDiscountPerLvl", structures);
       const aDiscount = user.anbuId ? ANBU_ITEMSHOP_DISCOUNT_PERC : 0;
       const factor = (100 - sDiscount - aDiscount) / 100;
@@ -535,8 +537,11 @@ export const itemRouter = createTRPCRouter({
       if (info.hidden && !canChangeContent(user.role)) {
         return errorResponse("Item is hidden, cannot be bought");
       }
-      if (userItemsCount >= calcMaxItems(user)) {
+      if (!info.isEventItem && regularItemsCount >= calcMaxItems(user)) {
         return errorResponse("Inventory is full");
+      }
+      if (info.isEventItem && eventItemsCount >= calcMaxEventItems(user)) {
+        return errorResponse("Event item inventory is full");
       }
       const ryoCost = Math.ceil(info.cost * input.stack * factor);
       const repsCost = Math.ceil(info.repsCost * input.stack);

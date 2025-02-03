@@ -423,6 +423,7 @@ export const clan = mysqlTable(
     leaderOrderId: varchar("leaderOrderId", { length: 191 }).notNull(),
     trainingBoost: double("trainingBoost").default(0).notNull(),
     ryoBoost: double("ryoBoost").default(0).notNull(),
+    regenBoost: double("regenBoost").default(0).notNull(),
     points: int("points").default(0).notNull(),
     bank: bigint("bank", { mode: "number" }).default(0).notNull(),
     pvpActivity: int("pvpActivity").default(0).notNull(),
@@ -1380,16 +1381,24 @@ export const userData = mysqlTable(
     immunityUntil: datetime("immunityUntil", { mode: "date", fsp: 3 })
       .default(sql`(CURRENT_TIMESTAMP(3))`)
       .notNull(),
+    robImmunityUntil: datetime("robImmunityUntil", { mode: "date", fsp: 3 })
+      .default(sql`(CURRENT_TIMESTAMP(3))`)
+      .notNull(),
     trainingStartedAt: datetime("trainingStartedAt", { mode: "date", fsp: 3 }),
     trainingSpeed: mysqlEnum("trainingSpeed", consts.TrainingSpeeds)
       .default("15min")
       .notNull(),
     currentlyTraining: mysqlEnum("currentlyTraining", consts.UserStatNames),
     unreadNotifications: smallint("unreadNotifications").default(0).notNull(),
-    unreadNews: tinyint("unreadNews").default(0).notNull(),
+    unreadNews: smallint("unreadNews").default(0).notNull(),
     questData: json("questData").$type<QuestTrackerType[]>(),
     senseiId: varchar("senseiId", { length: 191 }),
     medicalExperience: int("medicalExperience").default(0).notNull(),
+    // Settings
+    preferredStat: mysqlEnum("preferredStat", consts.StatTypes),
+    preferredGeneral1: mysqlEnum("preferredGeneral1", consts.GeneralTypes),
+    preferredGeneral2: mysqlEnum("preferredGeneral2", consts.GeneralTypes),
+    showBattleDescription: boolean("showBattleDescription").default(true).notNull(),
     // Statistics
     pvpFights: int("pvpFights").default(0).notNull(),
     pveFights: int("pveFights").default(0).notNull(),
@@ -2363,32 +2372,37 @@ export const linkPromotionRelations = relations(linkPromotion, ({ one }) => ({
   }),
 }));
 
-export const userVotes = mysqlTable(
-  "UserVotes",
+export const userVote = mysqlTable(
+  "UserVote",
   {
     id: varchar("id", { length: 191 }).primaryKey().notNull(),
     userId: varchar("userId", { length: 191 }).notNull(),
-    siteId: varchar("siteId", { length: 191 }).notNull(),
+    topWebGames: boolean("topWebGames").default(false).notNull(),
+    top100Arena: boolean("top100Arena").default(false).notNull(),
+    mmoHub: boolean("mmoHub").default(false).notNull(),
+    arenaTop100: boolean("arenaTop100").default(false).notNull(),
+    xtremeTop100: boolean("xtremeTop100").default(false).notNull(),
+    topOnlineMmorpg: boolean("topOnlineMmorpg").default(false).notNull(),
+    gamesTop200: boolean("gamesTop200").default(false).notNull(),
+    browserMmorpg: boolean("browserMmorpg").default(false).notNull(),
+    apexWebGaming: boolean("apexWebGaming").default(false).notNull(),
+    mmorpg100: boolean("mmorpg100").default(false).notNull(),
+    claimed: boolean("claimed").default(false).notNull(),
+    secret: varchar("secret", { length: 191 }).notNull(),
     lastVoteAt: datetime("lastVoteAt", { mode: "date", fsp: 3 })
       .default(sql`(CURRENT_TIMESTAMP(3))`)
       .notNull(),
-    votes: int("votes").default(0).notNull(),
-    lastRawJson: json("lastRawJson").notNull(),
   },
   (table) => {
     return {
-      userIdIdx: index("UserVotes_userId_idx").on(table.userId),
-      uniqueUserSite: uniqueIndex("UserVotes_userId_siteId_key").on(
-        table.userId,
-        table.siteId,
-      ),
+      userIdIdx: uniqueIndex("UserVote_userId_idx").on(table.userId),
     };
   },
 );
 
-export const userVotesRelations = relations(userVotes, ({ one }) => ({
+export const userVoteRelations = relations(userVote, ({ one }) => ({
   user: one(userData, {
-    fields: [userVotes.userId],
+    fields: [userVote.userId],
     references: [userData.userId],
   }),
 }));

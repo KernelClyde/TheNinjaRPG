@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { useForm } from "react-hook-form";
 import type { z } from "zod";
@@ -19,6 +19,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Medal } from "lucide-react";
 import { parseHtml } from "@/utils/parse";
 import { awardSchema } from "@/validators/reputation";
+import { publicUserText } from "@/layout/seoTexts";
 import Link from "next/link";
 import Image from "next/image";
 import StatusBar from "@/layout/StatusBar";
@@ -35,7 +36,7 @@ import { ActionSelector } from "@/layout/CombatActions";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useLocalStorage } from "@/hooks/localstorage";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { TrainingSpeeds } from "@/drizzle/constants";
+import { JUTSU_LEVEL_CAP, TrainingSpeeds } from "@/drizzle/constants";
 import { TransactionHistory } from "src/app/points/page";
 import { capitalizeFirstLetter } from "@/utils/sanitize";
 import { EditContent } from "@/layout/EditContent";
@@ -58,7 +59,7 @@ import {
 } from "@/utils/permissions";
 import { api } from "@/app/_trpc/client";
 import { showMutationToast } from "@/libs/toast";
-import { canChangePublicUser } from "@/utils/permissions";
+import { canClearUserNindo, canEditPublicUser } from "@/utils/permissions";
 import { useUserData } from "@/utils/UserContext";
 import { useUserEditForm } from "@/hooks/profile";
 import { Chart as ChartJS } from "chart.js/auto";
@@ -78,6 +79,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import type { Jutsu } from "@/drizzle/schema";
 
 interface PublicUserComponentProps {
   userId: string;
@@ -271,7 +273,7 @@ const PublicUserComponent: React.FC<PublicUserComponentProps> = (props) => {
   });
 
   // Derived
-  const canChange = userData && canChangePublicUser(userData);
+  const canChange = userData && canClearUserNindo(userData);
   const availableRoles = userData && canChangeUserRole(userData.role);
 
   // Loaders
@@ -304,63 +306,7 @@ const PublicUserComponent: React.FC<PublicUserComponentProps> = (props) => {
           back_href={back_href}
           initialBreak={initialBreak}
         >
-          Welcome to <b>{profile.username}</b>&apos;s profile on The Ninja RPG, the
-          ultimate destination for immersive ninja role-playing experiences. This
-          profile is your window into {profile.username}&apos;s in-game journey,
-          showcasing their ninja stats, rank, achievements, mission history,
-          affiliations, etc. Whether you&apos;re a seasoned player or a newcomer to the
-          ninja world, this profile offers a unique look at how {profile.username} has
-          built their ninja legacy within our dynamic RPG community. <br />
-          <br />
-          In the ever-evolving ninja universe of The Ninja RPG, every profile tells a
-          story. Explore {profile.username}&apos;s combat skills, elemental affinities,
-          strategic decisions, and progress through various ninja ranks. See how
-          they&apos;ve tackled challenging missions, contributed to their clan&apos;s
-          strength, and navigated the intricate politics of the ninja world. Profiles
-          like this highlight the creativity, strategy, and dedication that define our
-          players&apos; adventures. <br />
-          <br />
-          Are you ready to start or improve your own ninja journey? Equip yourself with
-          the tools you need! Dive into the comprehensive{" "}
-          <Link className="font-bold" href="/manual">
-            game manual
-          </Link>
-          , your guide to mastering everything from battle mechanics and skill trees to
-          mission strategies and crafting. Join the vibrant{" "}
-          <Link className="font-bold" href="https://discord.gg/grPmTr4z9C">
-            Discord community
-          </Link>
-          , where ninjas from across the globe come together to discuss game updates,
-          share strategies, and make lifelong connections. Engage directly with
-          developers and fellow enthusiasts through our{" "}
-          <Link
-            className="font-bold"
-            href="https://github.com/MathiasGruber/TheNinjaRPG/issues"
-          >
-            GitHub repository
-          </Link>
-          , where you can view the latest updates, report issues, and even contribute to
-          the game&apos;s codebase. For detailed discussions, game tips, and debates
-          about ninja lore, visit the bustling{" "}
-          <Link className="font-bold" href="/forum">
-            forums
-          </Link>
-          , the heart of our online ninja community.
-          <br />
-          <br /> User profiles on The Ninja RPG are more than just stats; they&apos;re a
-          reflection of each player&apos;s unique path and impact on the game&apos;s
-          rich, immersive world. By exploring profiles like {profile.username}&apos;s,
-          you can learn about different playstyles, gain inspiration for your own ninja
-          character, and strategize for your next adventure. Whether you&apos;re here to
-          compete, collaborate, or simply learn, every page offers a wealth of insights.
-          <br />
-          <br />
-          Don&apos;t forget that The Ninja RPG is always growing. New missions,
-          challenges, and features are constantly being added to enhance your gameplay
-          experience. Make sure to stay connected through our Discord server and forums
-          to be the first to hear about updates and special events. Ready to take your
-          ninja skills to the next level? Sign up today at theninja-rpg.com, start
-          building your ninja legacy, and become a legend in the ninja world.
+          {publicUserText(profile.username)}
         </ContentBox>
       )}
       {/* USER STATISTICS */}
@@ -377,16 +323,18 @@ const PublicUserComponent: React.FC<PublicUserComponentProps> = (props) => {
                 onClick={() => cloneUser.mutate({ userId: profile.userId })}
               />
             )}
-            {availableRoles && availableRoles.length > 0 && (
-              <EditUserComponent
-                userId={profile.userId}
-                profile={{
-                  ...profile,
-                  items: profile.items.map((ui) => ui.itemId),
-                  jutsus: profile.jutsus.map((ui) => ui.jutsuId),
-                }}
-              />
-            )}
+            {availableRoles &&
+              availableRoles.length > 0 &&
+              canEditPublicUser(userData) && (
+                <EditUserComponent
+                  userId={profile.userId}
+                  profile={{
+                    ...profile,
+                    items: profile.items.map((ui) => ui.itemId),
+                    jutsus: profile.jutsus.map((ui) => ui.jutsuId),
+                  }}
+                />
+              )}
             {userData && canAwardReputation(userData.role) && (
               <Confirm
                 title="Award Reputation Points"
@@ -936,18 +884,58 @@ interface EditUserComponentProps {
 }
 
 const EditUserComponent: React.FC<EditUserComponentProps> = ({ userId, profile }) => {
+  // State
+  const [jutsu, setJutsu] = useState<Jutsu | undefined>(undefined);
+  const [showActive, setShowActive] = useState<string>("userData");
+  const now = new Date();
+
   // tRPC utility
   const utils = api.useUtils();
 
-  // Refetching public user
-  const refetchProfile = () => void utils.profile.getPublicUser.invalidate();
-
   // Form handling
-  const { form, formData, handleUserSubmit } = useUserEditForm(
+  const { form, formData, userJutsus, handleUserSubmit } = useUserEditForm(
     userId,
     profile,
-    refetchProfile,
   );
+
+  // Form for jutsu level
+  const jutsuLevelForm = useForm<{ level: number }>({
+    defaultValues: {
+      level: userJutsus?.find((uj) => uj.jutsuId === jutsu?.id)?.level || 0,
+    },
+  });
+
+  // Mutation for adjusting jutsu level
+  const adjustJutsuLevel = api.jutsu.adjustJutsuLevel.useMutation({
+    onSuccess: async (data) => {
+      showMutationToast(data);
+      if (data.success) {
+        await utils.profile.getPublicUser.invalidate();
+        await utils.jutsu.getPublicUserJutsus.invalidate();
+      }
+    },
+  });
+
+  // Derived
+  const userJutsu = userJutsus?.find((uj) => uj.jutsuId === jutsu?.id);
+  const allJutsus = userJutsus?.map((uj) => uj.jutsu);
+  const userJutsuCounts = userJutsus?.map((userJutsu) => {
+    return {
+      id: userJutsu.jutsuId,
+      quantity:
+        userJutsu.finishTraining && userJutsu.finishTraining > now
+          ? userJutsu.level - 1
+          : userJutsu.level,
+    };
+  });
+  const hasJutsus = userJutsus && userJutsus.length > 0;
+
+  // Update jutsu level form default value when jutsu changes
+  useEffect(() => {
+    if (userJutsu) {
+      jutsuLevelForm.reset({ level: userJutsu.level });
+    }
+  }, [userJutsu, jutsuLevelForm]);
 
   return (
     <Confirm
@@ -955,16 +943,100 @@ const EditUserComponent: React.FC<EditUserComponentProps> = ({ userId, profile }
       proceed_label="Done"
       button={<Settings className="h-6 w-6 cursor-pointer hover:text-orange-500" />}
     >
-      <EditContent
-        schema={updateUserSchema}
-        form={form}
-        formData={formData}
-        showSubmit={form.formState.isDirty}
-        buttonTxt="Save to Database"
-        type="ai"
-        allowImageUpload={true}
-        onAccept={handleUserSubmit}
-      />
+      <Tabs
+        defaultValue={showActive}
+        className="flex flex-col items-center justify-center"
+        onValueChange={(value) => setShowActive(value)}
+      >
+        <TabsList className="text-center mt-3">
+          <TabsTrigger value="userData">Main Data</TabsTrigger>
+          {hasJutsus && <TabsTrigger value="jutsus">Jutsus Specifics</TabsTrigger>}
+        </TabsList>
+        <TabsContent value="userData">
+          <EditContent
+            schema={updateUserSchema}
+            form={form}
+            formData={formData}
+            showSubmit={form.formState.isDirty}
+            buttonTxt="Save to Database"
+            type="ai"
+            allowImageUpload={true}
+            onAccept={handleUserSubmit}
+          />
+        </TabsContent>
+        {hasJutsus && (
+          <TabsContent value="jutsus">
+            <div className="mt-5">
+              <ActionSelector
+                items={allJutsus}
+                counts={userJutsuCounts}
+                selectedId={jutsu?.id}
+                labelSingles={true}
+                emptyText="No jutsus assigned to this user"
+                gridClassNameOverwrite="grid grid-cols-5 sm:grid-cols-10 md:grid-cols-12"
+                onClick={(id) => {
+                  if (id == jutsu?.id) {
+                    setJutsu(undefined);
+                  } else {
+                    setJutsu(allJutsus?.find((jutsu) => jutsu.id === id));
+                  }
+                }}
+                showBgColor={false}
+                showLabels={true}
+              />
+            </div>
+            {jutsu && (
+              <div className="mt-4 flex items-center justify-center gap-4">
+                <div className="flex items-center gap-2">
+                  <Form {...jutsuLevelForm}>
+                    <form
+                      onSubmit={jutsuLevelForm.handleSubmit((data) => {
+                        if (jutsu) {
+                          adjustJutsuLevel.mutate({
+                            userId: userId,
+                            jutsuId: jutsu.id,
+                            level: data.level,
+                          });
+                        }
+                      })}
+                      className="flex items-center justify-between w-full gap-2"
+                    >
+                      <div className="flex items-center gap-2">
+                        <FormField
+                          control={jutsuLevelForm.control}
+                          name="level"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Level</FormLabel>
+                              <div className="relative flex flex-row gap-2">
+                                <FormControl>
+                                  <Input
+                                    type="number"
+                                    className="w-20"
+                                    min={0}
+                                    max={JUTSU_LEVEL_CAP}
+                                    {...field}
+                                    onChange={(e) => {
+                                      const value = e.target.value;
+                                      field.onChange(value ? parseInt(value) : 0);
+                                    }}
+                                  />
+                                </FormControl>
+                                <Button type="submit">Update</Button>
+                              </div>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    </form>
+                  </Form>
+                </div>
+              </div>
+            )}
+          </TabsContent>
+        )}
+      </Tabs>
     </Confirm>
   );
 };

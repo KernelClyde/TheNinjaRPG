@@ -9,6 +9,8 @@ import { extractRouterConfig } from "uploadthing/server";
 import { ourFileRouter } from "@/app/api/uploadthing/core";
 import TrpcClientProvider from "@/app/_trpc/Provider";
 import LayoutCore4 from "@/components/layout/core4_default";
+import { IMG_LOGO_FULL } from "@/drizzle/constants";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import type { Viewport, Metadata } from "next";
 
 import "../styles/globals.css";
@@ -16,7 +18,7 @@ import "../styles/globals.css";
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body>
+      <body className="h-full">
         <NextSSRPlugin
           /** https://docs.uploadthing.com/getting-started/appdir */
           routerConfig={extractRouterConfig(ourFileRouter)}
@@ -36,8 +38,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 {env.NEXT_PUBLIC_MEASUREMENT_ID && (
                   <GoogleTagManager gtmId={env.NEXT_PUBLIC_MEASUREMENT_ID} />
                 )}
-                <Toaster />
                 <LayoutCore4>{children}</LayoutCore4>
+                <Toaster />
+                <SpeedInsights sampleRate={0.03} />
               </UserContextProvider>
             </TrpcClientProvider>
           </MultisessionAppSupport>
@@ -47,10 +50,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   );
 }
 
+// Reused variables
+const title = "TheNinja-RPG - Online RPG - Free Online Game for Ninjas";
+const description =
+  "A free browser game with ninja set in the world of Seichi. A free online game";
+
+// Metadata
 export const metadata: Metadata = {
-  title: "TheNinja-RPG - Online RPG game - Free Browser Game with Ninjas",
-  description:
-    "A free browser game with ninja set in the world of Seichi. A multiplayer RPG game with 2D travel and combat system. Works on Desktop, Phone or Tablet devices.",
+  title: title,
+  description: description,
   keywords: [
     "anime",
     "community",
@@ -74,17 +82,16 @@ export const metadata: Metadata = {
   creator: "Mathias F. Gruber",
   publisher: "Studie-Tech ApS",
   openGraph: {
-    title: "TheNinja-RPG",
-    description:
-      "A free browser game with ninja set in the world of Seichi. A multiplayer RPG game with 2D travel and combat system. Works on Desktop, Phone or Tablet devices.",
+    title: title,
+    description: description,
     url: "https://www.theninja-rpg.com",
     siteName: "TheNinja-RPG",
     images: [
       {
-        url: "https://www.theninja-rpg.com/api/og?imageid=", // Must be an absolute URL
+        url: IMG_LOGO_FULL,
         width: 512,
         height: 768,
-        alt: "AI generated image",
+        alt: "TheNinja-RPG Logo",
       },
     ],
     locale: "en_US",
@@ -92,13 +99,12 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "The Ninja-RPG.com - a free browser based mmorpg",
-    description:
-      "A free browser game with ninja set in the world of Seichi. A multiplayer RPG game with 2D travel and combat system. Works on Desktop, Phone or Tablet devices.",
+    title: title,
+    description: description,
     siteId: "137431404",
     creator: "@nextjs",
     creatorId: "137431404",
-    images: ["https://nextjs.org/og.png"], // Must be an absolute URL
+    images: [IMG_LOGO_FULL], // Must be an absolute URL
   },
   icons: {
     icon: "/favicon.ico",

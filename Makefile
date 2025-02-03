@@ -4,7 +4,7 @@ SHELL := bash
 .DEFAULT_GOAL = help
 
 # Extract arguments for relevant targets.
-ARGS_TARGETS=makemigrations,bun
+ARGS_TARGETS=makemigrations,bun,uncommit
 ifneq ($(findstring $(firstword $(MAKECMDGOALS)),$(ARGS_TARGETS)),)
   ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
   $(eval $(ARGS):;@:)
@@ -37,6 +37,11 @@ cloc: # Count lines of code
 	@echo "${YELLOW}Count lines of code${RESET}"
 	cloc --exclude-dir=node_modules --exclude-ext=csv  --exclude-ext=json  --exclude-ext=svg .
 
+.PHONY: loadEnv
+loadEnv: # Load environment variables
+	@echo "${YELLOW}Loading environment variables${RESET}"
+	source ./app/.env
+
 -------------DockerSetup---------------: # -------------------------------------------------------
 .PHONY: docker-build
 docker-build: # Build/Rebuild the application.
@@ -68,15 +73,33 @@ bun: install ## Execute bun command in local development.
 	cd app && bun $(ARGS)
 
 .PHONY: start
-start: # Run Next.js server, access at https://localhost:3000
+start: loadEnv # Run Next.js server, access at http://127.0.0.1:3000
 	@echo "${GREEN}start${RESET}"
 	rm -rf app/.next
-	@make bun -- dev --experimental-https
+	@make bun -- dev
 
 .PHONY: build
 build: # Build Next.js app
 	@echo "${GREEN}build${RESET}"
 	cd app && bun run build
+
+.PHONY: openhands
+openhands: # Open OpenHands on http://127.0.0.1:3004
+	@echo "${GREEN}Launch Open Hands${RESET}"
+	$(eval WORKSPACE_BASE := $(shell pwd -P))
+	$(eval SANDBOX_USER_ID := $(shell id -u))
+	@docker run -it --rm --pull=always \
+		-e SANDBOX_RUNTIME_CONTAINER_IMAGE=docker.all-hands.dev/all-hands-ai/runtime:0.19-nikolaik \
+		-e SANDBOX_USER_ID=$(SANDBOX_USER_ID) \
+		-e WORKSPACE_MOUNT_PATH=$(WORKSPACE_BASE) \
+		-v $(WORKSPACE_BASE):/opt/workspace_base \
+		-e LOG_ALL_EVENTS=true \
+		-v /var/run/docker.sock:/var/run/docker.sock \
+		-v ~/.openhands-state:/.openhands-state \
+		-p 3004:3000 \
+		--add-host host.docker.internal:host-gateway \
+		--name openhands-app \
+		docker.all-hands.dev/all-hands-ai/openhands:0.19
 
 --------------Migrations----------------: # -------------------------------------------------------
 .PHONY: dbpush
@@ -106,10 +129,21 @@ test: # Push schema to db without creating migrations
 	@echo "${YELLOW}Running unit tests ${RESET}"
 	cd app && bun test
 
+.PHONY: lint
+lint: # Push schema to db without creating migrations
+	@echo "${YELLOW}Running linting ${RESET}"
+	cd app && bun lint
+
 
 -------------DEPENDENCIES---------------: # -------------------------------------------------------
 .PHONY: deps-upgrade
 deps-upgrade: # Upgrade all dependencies to their latest version
 	@echo "${YELLOW}Upgrading all dependencies ${RESET}"
 	cd app && npx npm-check-updates -u
+
+---------------Git--------------------: # -------------------------------------------------------
+.PHONY: uncommit
+uncommit: # Undo the last N commits (keeping changes staged), usage: make uncommit N
+	@echo "${YELLOW}Uncommitting last $(ARGS) commits${RESET}"
+	git reset --soft HEAD~$(ARGS)
 	
