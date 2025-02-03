@@ -114,8 +114,10 @@ export const UserRoles = [
   "MODERATOR-ADMIN",
   "HEAD_MODERATOR",
   "MODERATOR",
+  "JR_MODERATOR",
   "CONTENT",
   "EVENT",
+  "CODER",
 ] as const;
 export type UserRole = (typeof UserRoles)[number];
 
@@ -410,6 +412,13 @@ export const PAYPAL_DISCOUNT_PERCENT = 0;
 export const TRANSACTION_TYPES = ["REP_PURCHASE", "REFERRAL"] as const;
 export type TransactionType = (typeof TRANSACTION_TYPES)[number];
 
+// Outlaw config
+export const ROBBING_SUCCESS_CHANCE = 0.4;
+export const ROBBING_STOLLEN_AMOUNT = 0.3;
+export const ROBBING_VILLAGE_PRESTIGE_GAIN = 5;
+export const ROBBING_IMMUNITY_DURATION = 90;
+export const KILLING_NOTORIETY_GAIN = 5;
+
 // Reputation cost config
 export const COST_CHANGE_USERNAME = 5;
 export const COST_CUSTOM_TITLE = 5;
@@ -434,6 +443,7 @@ export const ANBU_LEADER_RANK_REQUIREMENT = "JONIN";
 export const ANBU_MAX_MEMBERS = 20;
 export const ANBU_HOSPITAL_DISCOUNT_PERC = 5;
 export const ANBU_ITEMSHOP_DISCOUNT_PERC = 5;
+export const ANBU_DELAY_SECS = 24 * 3600;
 
 // Sensei config
 export const SENSEI_RANKS = ["JONIN", "COMMANDER", "ELDER"];
@@ -493,6 +503,10 @@ export const FED_GOLD_JUTSU_SLOTS = 3;
 export const FED_NORMAL_JUTSU_LOADOUTS = 1;
 export const FED_SILVER_JUTSU_LOADOUTS = 2;
 export const FED_GOLD_JUTSU_LOADOUTS = 3;
+export const FED_EVENT_ITEMS_NORMAL = 15;
+export const FED_EVENT_ITEMS_SILVER = 20;
+export const FED_EVENT_ITEMS_GOLD = 25;
+export const FED_EVENT_ITEMS_DEFAULT = 10;
 
 // Missions config
 export const MISSIONS_PER_DAY = 9;
@@ -500,16 +514,18 @@ export const MISSIONS_PER_DAY = 9;
 // Clans config
 export const CLAN_MPVP_MAX_USERS_PER_SIDE = 3;
 export const CLAN_CREATE_PRESTIGE_REQUIREMENT = 100;
-export const CLAN_CREATE_RYO_COST = 1000000;
+export const CLAN_CREATE_RYO_COST = 10000000;
 export const CLAN_RANK_REQUIREMENT = "GENIN";
-export const CLAN_MAX_MEMBERS = 50;
-export const CLANS_PER_STRUCTURE_LEVEL = 3;
+export const CLAN_MAX_MEMBERS = 100;
+export const CLANS_PER_STRUCTURE_LEVEL = 999999;
 export const CLAN_LOBBY_SECONDS = 30;
 export const CLAN_BATTLE_REWARD_POINTS = 50;
-export const MAX_TRAINING_BOOST = 15;
-export const MAX_RYO_BOOST = 15;
-export const TRAINING_BOOST_COST = 300;
-export const RYO_BOOST_COST = 100;
+export const CLAN_MAX_TRAINING_BOOST = 15;
+export const CLAN_MAX_RYO_BOOST = 15;
+export const CLAN_MAX_REGEN_BOOST = 15;
+export const CLAN_TRAINING_BOOST_COST = 300;
+export const CLAN_RYO_BOOST_COST = 100;
+export const CLAN_REGEN_BOOST_COST = 300;
 
 // Tournament Config
 export const TOURNAMENT_ROUND_SECONDS = 30 * 60;
@@ -676,6 +692,8 @@ export const IMG_HOME_SLEEP =
   "https://utfs.io/f/Hzww9EQvYURJu8FpvZCyJLoOFkrcn4gxSwCfEQ9eMNXZlG8b";
 export const IMG_HOME_AWAKE =
   "https://utfs.io/f/Hzww9EQvYURJ1BKctL6bo95WClq4K0wxZUmJcvThgdVenO3P";
+export const IMG_MANUAL_AWARDS =
+  "https://utfs.io/f/Hzww9EQvYURJD2QXqVzEwoh0WXMnscL279N8ayVQUCbRzS3p";
 export const IMG_MANUAL_COMBAT =
   "https://utfs.io/f/Hzww9EQvYURJUvE8xxILCIhwPniJ69VxpvAbTDWkOyGzS8rM";
 export const IMG_MANUAL_TRAVEL =
@@ -752,6 +770,8 @@ export const IMG_SECTOR_INFO =
   "https://utfs.io/f/ddab9f31-0491-4445-8e6e-98370533a93d-1xdpq.png";
 export const IMG_SECTOR_ATTACK =
   "https://utfs.io/f/d6587d1a-c11b-49e3-8e86-74bfb02a80a1-n9ug1k.png";
+export const IMG_SECTOR_ROB =
+  "https://ui0arpl8sm.ufs.sh/f/Hzww9EQvYURJvNL3jBEmSnXwslYEpV1yOeNL8gMtqhjPdf36";
 export const IMG_SECTOR_USER_MARKER =
   "https://utfs.io/f/cc347416-8bf6-40cf-9184-b4af64e6feae-n771t1.webp";
 export const IMG_SECTOR_USER_SPRITE_MASK =

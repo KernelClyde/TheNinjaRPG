@@ -1,16 +1,21 @@
-"use client";;
+"use client";
 import { use } from "react";
 
 import ContentBox from "@/layout/ContentBox";
 import Loader from "@/layout/Loader";
+import { jutsuText } from "@/layout/seoTexts";
+import { useUserData } from "@/utils/UserContext";
 import { api } from "@/app/_trpc/client";
 import { UsageStats, LevelStats } from "@/layout/UsageStatistics";
 
-export default function JutsuStatistics(props: { params: Promise<{ jutsuid: string }> }) {
+export default function JutsuStatistics(props: {
+  params: Promise<{ jutsuid: string }>;
+}) {
   const params = use(props.params);
   const jutsuId = params.jutsuid;
 
   // Queries
+  const { data: userData } = useUserData();
   const { data, isPending } = api.data.getStatistics.useQuery(
     { id: jutsuId, type: "jutsu" },
     { enabled: !!jutsuId },
@@ -28,10 +33,20 @@ export default function JutsuStatistics(props: { params: Promise<{ jutsuid: stri
   // Show panel controls
   return (
     <>
+      {!userData && jutsu && "name" in jutsu && (
+        <ContentBox
+          title="Jutsu Statistics"
+          subtitle={jutsu.name}
+          back_href="/manual/jutsu"
+        >
+          {jutsuText(jutsu.name)}
+        </ContentBox>
+      )}
       <ContentBox
         title={`Jutsu: ${name}`}
         subtitle={`Total users: ${totalUsers}`}
-        back_href="/manual/jutsu"
+        initialBreak={!userData && !!jutsu}
+        back_href={userData ? "/manual/jutsu" : undefined}
       >
         {levelDistribution && (
           <LevelStats

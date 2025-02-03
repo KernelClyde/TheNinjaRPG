@@ -12,10 +12,13 @@ import { userReportSchema } from "@/validators/reports";
 import { reportCommentSchema } from "@/validators/reports";
 import { requestAvatarForUser } from "@/libs/replicate";
 import { canModerateReports } from "@/utils/permissions";
+import { canBanUsers } from "@/utils/permissions";
+import { canSilenceUsers } from "@/utils/permissions";
+import { canWarnUsers } from "@/utils/permissions";
 import { canSeeReport } from "@/utils/permissions";
 import { canClearReport } from "@/utils/permissions";
 import { canEscalateBan } from "@/utils/permissions";
-import { canChangePublicUser } from "@/utils/permissions";
+import { canClearUserNindo } from "@/utils/permissions";
 import { fetchUser } from "./profile";
 import { fetchImage } from "./conceptart";
 import { canSeeSecretData } from "@/utils/permissions";
@@ -27,6 +30,7 @@ import { TERR_BOT_ID } from "@/drizzle/constants";
 import { generateModerationDecision } from "@/libs/moderator";
 import { getAdditionalContext } from "@/libs/moderator";
 import sanitize from "@/utils/sanitize";
+import { canModerateRoles } from "@/utils/permissions";
 import { reportFilteringSchema } from "@/validators/reports";
 import type { BanState } from "@/drizzle/constants";
 import type { ReportCommentSchema } from "@/validators/reports";
@@ -199,11 +203,12 @@ export const reportsRouter = createTRPCRouter({
       const user = await fetchUser(ctx.drizzle, ctx.userId);
       const reportedUser = alias(userData, "reportedUser");
       const reporterUser = alias(userData, "reporterUser");
+      const staffUser = canModerateRoles.includes(user.role);
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { reporterUserId, ...rest } = getTableColumns(userReport);
       const reports = await ctx.drizzle
         .select({
-          UserReport: user.role === "USER" ? { ...rest } : getTableColumns(userReport),
+          UserReport: !staffUser ? { ...rest } : getTableColumns(userReport),
           reportedUser: { ...getTableColumns(reportedUser) },
         })
         .from(userReport)
@@ -218,7 +223,7 @@ export const reportsRouter = createTRPCRouter({
             ...(input.endDate !== undefined
               ? [lte(userReport.createdAt, new Date(input.endDate))]
               : []),
-            ...(user.role === "USER"
+            ...(!staffUser
               ? [
                   and(
                     eq(userReport.reportedUserId, ctx.userId),
@@ -262,10 +267,12 @@ export const reportsRouter = createTRPCRouter({
     }),
   // Get user report
   getBan: protectedProcedure.query(async ({ ctx }) => {
-    const [user, report] = await Promise.all([
+    // Selector statement
+    const [user, banReport, silenceReport] = await Promise.all([
       fetchUser(ctx.drizzle, ctx.userId),
       ctx.drizzle.query.userReport.findFirst({
         where: and(
+          eq(userReport.status, "BAN_ACTIVATED"),
           eq(userReport.reportedUserId, ctx.userId),
           gt(userReport.banEnd, new Date()),
         ),
@@ -296,15 +303,29 @@ export const reportsRouter = createTRPCRouter({
           },
         },
       }),
+      ctx.drizzle.query.userReport.findFirst({
+        where: and(
+          eq(userReport.status, "SILENCE_ACTIVATED"),
+          eq(userReport.reportedUserId, ctx.userId),
+          gt(userReport.banEnd, new Date()),
+        ),
+      }),
     ]);
+    // Unsilence user if ban no longer active
+    if (!silenceReport && user.isSilenced) {
+      await ctx.drizzle
+        .update(userData)
+        .set({ isSilenced: false })
+        .where(eq(userData.userId, ctx.userId));
+    }
     // Unban user if ban no longer active
-    if (!report && user.isBanned) {
+    if (!banReport && user.isBanned) {
       await ctx.drizzle
         .update(userData)
         .set({ isBanned: false })
         .where(eq(userData.userId, ctx.userId));
     }
-    return report ?? null;
+    return banReport ?? null;
   }),
   // Get a single report
   get: protectedProcedure
@@ -415,6 +436,7 @@ export const reportsRouter = createTRPCRouter({
       // Guard
       const hasModRights = canModerateReports(user, report);
       if (!hasModRights) return errorResponse("You cannot resolve this report");
+      if (!canBanUsers(user)) return errorResponse("You cannot ban users");
       if (!input.banTime || input.banTime <= 0) {
         return errorResponse("Ban time must be specified.");
       }
@@ -460,6 +482,7 @@ export const reportsRouter = createTRPCRouter({
       // Guard
       const hasModRights = canModerateReports(user, report);
       if (!hasModRights) return errorResponse("You cannot resolve this report");
+      if (!canSilenceUsers(user)) return errorResponse("You cannot silence users");
       if (!input.banTime || input.banTime <= 0) {
         return errorResponse("Ban time must be specified.");
       }
@@ -505,6 +528,7 @@ export const reportsRouter = createTRPCRouter({
       // Guard
       const hasModRights = canModerateReports(user, report);
       if (!hasModRights) return errorResponse("No permission to warn");
+      if (!canWarnUsers(user)) return errorResponse("You cannot warn users");
       // Update
       await Promise.all([
         ctx.drizzle
@@ -578,7 +602,7 @@ export const reportsRouter = createTRPCRouter({
         // Remove ban if no other active bans
         const bans = await ctx.drizzle.query.userReport.findMany({
           where: and(
-            eq(userReport.reportedUserId, report.reportedUserId),
+            eq(userReport.reportedUserId, report.reportedUserId ?? ""),
             eq(userReport.status, "BAN_ACTIVATED"),
             gte(userReport.banEnd, new Date()),
             ne(userReport.id, report.id),
@@ -593,7 +617,7 @@ export const reportsRouter = createTRPCRouter({
         // Remove silence if no other active bans
         const silences = await ctx.drizzle.query.userReport.findMany({
           where: and(
-            eq(userReport.reportedUserId, report.reportedUserId),
+            eq(userReport.reportedUserId, report.reportedUserId ?? ""),
             eq(userReport.status, "SILENCE_ACTIVATED"),
             gte(userReport.banEnd, new Date()),
             ne(userReport.id, report.id),
@@ -636,7 +660,7 @@ export const reportsRouter = createTRPCRouter({
         fetchUser(ctx.drizzle, input.userId),
       ]);
       // Guard
-      if (!canChangePublicUser(user)) return errorResponse("You cannot clear nindos");
+      if (!canClearUserNindo(user)) return errorResponse("You cannot clear nindos");
       // Mutate
       void requestAvatarForUser(ctx.drizzle, target);
       await Promise.all([
@@ -663,7 +687,7 @@ export const reportsRouter = createTRPCRouter({
         fetchUser(ctx.drizzle, input.userId),
       ]);
       // Guard
-      if (!canChangePublicUser(user)) return errorResponse("You cannot clear nindos");
+      if (!canClearUserNindo(user)) return errorResponse("You cannot clear nindos");
       // Mutate
       await Promise.all([
         ctx.drizzle.insert(reportLog).values({

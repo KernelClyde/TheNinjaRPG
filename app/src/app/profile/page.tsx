@@ -79,7 +79,8 @@ export default function Profile() {
             <p>Reputation points: {userData.reputationPoints.toFixed(2)}</p>
             <p>Federal Support: {userData.federalStatus.toLowerCase()}</p>
             <p>Activity Streak: {userData.activityStreak}</p>
-            <p>Village prestige: {userData.villagePrestige}</p>
+            {userData.isOutlaw && <p>Notoriety: {userData.villagePrestige}</p>}
+            {!userData.isOutlaw && <p>Village prestige: {userData.villagePrestige}</p>}
           </div>
           <div>
             <b>Associations</b>
@@ -94,7 +95,7 @@ export default function Profile() {
                 ? marriages.map((x, i) => (
                     <Link
                       key={x.username}
-                      href={`/userid/${x.userId}`}
+                      href={`/username/${x.username}`}
                       className="font-bold"
                     >
                       {i >= 1 ? ", " + x.username : x.username}

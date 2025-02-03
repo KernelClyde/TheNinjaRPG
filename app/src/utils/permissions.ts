@@ -42,7 +42,7 @@ export const canChangeUserRole = (role: UserRole) => {
   } else if (role === "CONTENT-ADMIN") {
     return ["USER", "CONTENT", "EVENT", "CONTENT-ADMIN"];
   } else if (role === "MODERATOR-ADMIN") {
-    return ["USER", "HEAD_MODERATOR", "MODERATOR"];
+    return ["USER", "HEAD_MODERATOR", "MODERATOR", "JR_MODERATOR"];
   }
 };
 
@@ -59,9 +59,13 @@ export const canSwapBloodline = (role: UserRole) => {
 };
 
 export const canSeeSecretData = (role: UserRole) => {
-  return ["MODERATOR", "HEAD_MODERATOR", "CODING-ADMIN", "MODERATOR-ADMIN"].includes(
-    role,
-  );
+  return [
+    "JR_MODERATOR",
+    "MODERATOR",
+    "HEAD_MODERATOR",
+    "CODING-ADMIN",
+    "MODERATOR-ADMIN",
+  ].includes(role);
 };
 
 export const canSeeIps = (role: UserRole) => {
@@ -77,6 +81,7 @@ export const canDeleteUsers = (role: UserRole) => {
 };
 
 export const canModerateRoles: UserRole[] = [
+  "JR_MODERATOR",
   "MODERATOR",
   "HEAD_MODERATOR",
   "MODERATOR-ADMIN",
@@ -94,9 +99,7 @@ export const canSeeReport = (user: UserData, report: UserReport) => {
   return (
     report.reporterUserId === user.userId ||
     report.reportedUserId === user.userId ||
-    ["MODERATOR", "HEAD_MODERATOR", "MODERATOR-ADMIN", "CODING-ADMIN"].includes(
-      user.role,
-    )
+    canModerateRoles.includes(user.role)
   );
 };
 
@@ -111,6 +114,7 @@ export const canModerateReports = (user: UserData, report: UserReport) => {
       (user.role === "CODING-ADMIN" && report.status === "UNVIEWED") ||
       (user.role === "MODERATOR" && report.status === "UNVIEWED") ||
       (user.role === "HEAD_MODERATOR" && report.status === "UNVIEWED") ||
+      (user.role === "JR_MODERATOR" && report.status === "UNVIEWED") ||
       (user.role === "MODERATOR-ADMIN" && report.status === "OFFICIAL_WARNING") ||
       (user.role === "MODERATOR-ADMIN" && report.status === "BAN_ACTIVATED") ||
       (user.role === "MODERATOR-ADMIN" && report.status === "BAN_ESCALATED") ||
@@ -124,8 +128,36 @@ export const canModerateReports = (user: UserData, report: UserReport) => {
       (user.role === "HEAD_MODERATOR" && report.status === "BAN_ACTIVATED") ||
       (user.role === "HEAD_MODERATOR" && report.status === "BAN_ESCALATED") ||
       (user.role === "HEAD_MODERATOR" && report.status === "SILENCE_ACTIVATED") ||
-      (user.role === "HEAD_MODERATOR" && report.status === "SILENCE_ESCALATED"))
+      (user.role === "HEAD_MODERATOR" && report.status === "SILENCE_ESCALATED") ||
+      (user.role === "MODERATOR" && report.status === "OFFICIAL_WARNING") ||
+      (user.role === "MODERATOR" && report.status === "SILENCE_ACTIVATED"))
   );
+};
+
+export const canBanUsers = (user: UserData) => {
+  return ["MODERATOR-ADMIN", "HEAD_MODERATOR", "MODERATOR", "CODING-ADMIN"].includes(
+    user.role,
+  );
+};
+
+export const canSilenceUsers = (user: UserData) => {
+  return [
+    "MODERATOR-ADMIN",
+    "HEAD_MODERATOR",
+    "MODERATOR",
+    "JR_MODERATOR",
+    "CODING-ADMIN",
+  ].includes(user.role);
+};
+
+export const canWarnUsers = (user: UserData) => {
+  return [
+    "MODERATOR-ADMIN",
+    "HEAD_MODERATOR",
+    "MODERATOR",
+    "JR_MODERATOR",
+    "CODING-ADMIN",
+  ].includes(user.role);
 };
 
 export const canDeleteComment = (user: UserData, commentAuthorId: string) => {
@@ -158,12 +190,24 @@ export const canClearReport = (user: UserData, report: UserReport) => {
   );
 };
 
-export const canChangePublicUser = (user: UserData) => {
+export const canClearUserNindo = (user: UserData) => {
   return ["MODERATOR", "HEAD_MODERATOR", "CODING-ADMIN", "MODERATOR-ADMIN"].includes(
     user.role,
   );
 };
 
+export const canEditPublicUser = (user: UserData) => {
+  return ["CONTENT-ADMIN", "CODING-ADMIN", "MODERATOR-ADMIN"].includes(user.role);
+};
+
+export const canAwardReputation = (role: UserRole) => {
+  return ["CODING-ADMIN", "CONTENT-ADMIN"].includes(role);
+};
+
 export const canChangeCombatBgScheme = (role: UserRole) => {
   return ["CODING-ADMIN", "CONTENT-ADMIN"].includes(role);
+};
+
+export const canReviewLinkPromotions = (role: UserRole) => {
+  return ["CODING-ADMIN"].includes(role);
 };

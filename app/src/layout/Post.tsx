@@ -73,6 +73,7 @@ const Post: React.FC<PostProps> = (props) => {
 
   switch (props.user?.role) {
     case "MODERATOR":
+    case "JR_MODERATOR":
       userColor =
         "bg-gradient-to-r from-green-800 via-green-500 to-green-800 bg-clip-text text-transparent";
       userRole = "bg-green-500";
@@ -154,7 +155,7 @@ const Post: React.FC<PostProps> = (props) => {
       {props.image}
       {props.user && (
         <div className="... mr-3 basis-2/12 truncate text-center sm:basis-3/12 sm:text-base">
-          <Link href={`/userid/${props.user.userId}`}>
+          <Link href={`/username/${props.user.username}`}>
             <AvatarImage
               href={props.user.avatar}
               userId={props.user.userId}
@@ -164,7 +165,7 @@ const Post: React.FC<PostProps> = (props) => {
           </Link>
           {props.user.nRecruited && props.user.nRecruited > 0 ? (
             <Link
-              href={`/userid/${props.user.userId}`}
+              href={`/username/${props.user.username}`}
               className="font-bold hover:text-orange-500 text-xs"
             >
               Recruits: {props.user.nRecruited}

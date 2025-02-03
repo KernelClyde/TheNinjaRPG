@@ -1,20 +1,21 @@
-"use client";;
+"use client";
 import { use } from "react";
 
 import ContentBox from "@/layout/ContentBox";
 import Loader from "@/layout/Loader";
+import { bloodlineText } from "@/layout/seoTexts";
+import { useUserData } from "@/utils/UserContext";
 import { api } from "@/app/_trpc/client";
 import { UsageStats, LevelStats } from "@/layout/UsageStatistics";
 
-export default function BloodlineStatistics(
-  props: {
-    params: Promise<{ bloodlineid: string }>;
-  }
-) {
+export default function BloodlineStatistics(props: {
+  params: Promise<{ bloodlineid: string }>;
+}) {
   const params = use(props.params);
   const bloodlineId = params.bloodlineid;
 
   // Queries
+  const { data: userData } = useUserData();
   const { data, isPending } = api.data.getStatistics.useQuery(
     { id: bloodlineId, type: "bloodline" },
     { enabled: !!bloodlineId },
@@ -34,10 +35,20 @@ export default function BloodlineStatistics(
   // Show panel controls
   return (
     <>
+      {!userData && bloodline && "name" in bloodline && (
+        <ContentBox
+          title="Bloodline Statistics"
+          subtitle={bloodline.name}
+          back_href="/manual/jutsu"
+        >
+          {bloodlineText(bloodline.name)}
+        </ContentBox>
+      )}
       <ContentBox
         title={`Bloodline: ${name}`}
         subtitle={`Total users: ${totalUsers}`}
-        back_href="/manual/bloodline"
+        initialBreak={!userData && !!bloodline}
+        back_href={userData ? "/manual/bloodline" : undefined}
       >
         {levelDistribution && (
           <LevelStats

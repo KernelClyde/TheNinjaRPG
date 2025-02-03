@@ -34,7 +34,6 @@ import { villageAlliance, village, tournamentMatch } from "@/drizzle/schema";
 import { performActionSchema, statSchema } from "@/libs/combat/types";
 import { performBattleAction } from "@/libs/combat/actions";
 import { availableUserActions } from "@/libs/combat/actions";
-import { calcIsInVillage } from "@/libs/travel/controls";
 import { BarrierTag } from "@/libs/combat/types";
 import { fetchGameAssets } from "@/routers/misc";
 import { getServerPusher, updateUserOnMap } from "@/libs/pusher";
@@ -433,13 +432,6 @@ export const combatRouter = createTRPCRouter({
 
           // Optimistic update for all other users before we process request. Also increment version
           const battleOver = result && result.friendsLeft + result.targetsLeft === 0;
-          if (!battleOver) {
-            // Only push websocket data if there is more than one non-AI in battle
-            const nUsers = battle.usersState.filter((u) => !u.isAi).length;
-            if (nUsers > 1) {
-              void pusher.trigger(battle.id, "event", { version: battle.version + 1 });
-            }
-          }
 
           // Only keep visual tags that are newer than original round
           newBattle.groundEffects = newBattle.groundEffects.filter(
@@ -463,6 +455,17 @@ export const combatRouter = createTRPCRouter({
             ]);
             const newMaskedBattle = maskBattle(newBattle, suid);
 
+            // Ping users on websocket
+            if (!battleOver) {
+              // Only push websocket data if there is more than one non-AI in battle
+              const nUsers = battle.usersState.filter((u) => !u.isAi).length;
+              if (nUsers > 1) {
+                void pusher.trigger(battle.id, "event", {
+                  version: battle.version + 1,
+                });
+              }
+            }
+
             // Return the new battle + result state if applicable
             return {
               updateClient: true,
@@ -470,8 +473,8 @@ export const combatRouter = createTRPCRouter({
               result: result,
               logEntries: logEntries,
             };
-            // eslint-disable-next-line
           } catch (e) {
+            console.error("Battle error: ", e);
             return {
               notification: `Seems like the battle was out of sync with server, please try again`,
             };
@@ -532,16 +535,8 @@ export const combatRouter = createTRPCRouter({
       if (!input.stats && user.dailyArenaFights >= BATTLE_ARENA_DAILY_LIMIT) {
         return errorResponse("Daily arena limit reached");
       }
-      // Check if location is OK
-      if (
-        !user.isOutlaw &&
-        (!calcIsInVillage({ x: user.longitude, y: user.latitude }) ||
-          !canAccessStructure(user, "/battlearena", sectorVillage))
-      ) {
-        return {
-          success: false,
-          message: "Must be in your allied village to go to arena",
-        };
+      if (!(user.isOutlaw || canAccessStructure(user, "/battlearena", sectorVillage))) {
+        return errorResponse("Must be in your allied village to go to arena");
       }
       // Determine battle background
       if (selectedAI) {

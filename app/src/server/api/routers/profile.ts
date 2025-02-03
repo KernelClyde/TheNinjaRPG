@@ -35,6 +35,7 @@ import {
 } from "@/drizzle/schema";
 import { canSeeSecretData, canDeleteUsers, canSeeIps } from "@/utils/permissions";
 import { canChangeContent, canModerateRoles } from "@/utils/permissions";
+import { canEditPublicUser } from "@/utils/permissions";
 import { usernameSchema } from "@/validators/register";
 import { insertNextQuest } from "@/routers/quests";
 import { fetchClan, removeFromClan } from "@/routers/clan";
@@ -59,6 +60,7 @@ import {
   updateGameSetting,
 } from "@/libs/gamesettings";
 import { updateUserSchema } from "@/validators/user";
+import { updateUserPreferencesSchema } from "@/validators/user";
 import { canChangeUserRole } from "@/utils/permissions";
 import { UserRanks, BasicElementName } from "@/drizzle/constants";
 import { getRandomElement } from "@/utils/array";
@@ -89,6 +91,43 @@ import type { NavBarDropdownLink } from "@/libs/menus";
 const pusher = getServerPusher();
 
 export const profileRouter = createTRPCRouter({
+  // Update battle description setting
+  updateBattleDescription: protectedProcedure
+    .input(z.object({ showBattleDescription: z.boolean() }))
+    .output(baseServerResponse)
+    .mutation(async ({ ctx, input }) => {
+      // Mutate
+      const result = await ctx.drizzle
+        .update(userData)
+        .set({ showBattleDescription: input.showBattleDescription })
+        .where(eq(userData.userId, ctx.userId));
+      // Potential errors
+      if (result.rowsAffected === 0) {
+        return errorResponse("Could not update battle description setting");
+      }
+      // Information
+      return {
+        success: true,
+        message: `Battle descriptions ${input.showBattleDescription ? "enabled" : "disabled"}`,
+      };
+    }),
+  // Update user preferences
+  updatePreferences: protectedProcedure
+    .input(updateUserPreferencesSchema)
+    .output(baseServerResponse)
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.drizzle
+        .update(userData)
+        .set(input)
+        .where(eq(userData.userId, ctx.userId));
+      return {
+        success: result.rowsAffected > 0,
+        message:
+          result.rowsAffected > 0
+            ? "Updated preferences"
+            : "Failed to update preferences",
+      };
+    }),
   // Get user blacklist
   getBlacklist: protectedProcedure.query(async ({ ctx }) => {
     return await ctx.drizzle.query.userBlackList.findMany({
@@ -243,6 +282,14 @@ export const profileRouter = createTRPCRouter({
     }
     // User specific
     if (user) {
+      // Link promotion
+      if (user.promotions.length === 0) {
+        notifications.push({
+          href: "/profile/recruit",
+          name: `Win a S-rank`,
+          color: "blue",
+        });
+      }
       // Get number of un-resolved user reports
       if (canModerateRoles.includes(user.role)) {
         const reportCounts = await ctx.drizzle
@@ -408,6 +455,9 @@ export const profileRouter = createTRPCRouter({
       ]);
       // Guards
       const availableRoles = canChangeUserRole(user.role);
+      if (!canEditPublicUser(user)) {
+        return errorResponse("You cannot edit public users");
+      }
       if (!village) return errorResponse("Village not found");
       if (!target) return errorResponse("User not found");
       if (!availableRoles) return errorResponse("Not allowed");
@@ -417,10 +467,10 @@ export const profileRouter = createTRPCRouter({
       if (!availableRoles.includes(input.data.role)) {
         return errorResponse(`Only available roles: ${availableRoles.join(", ")}`);
       }
-      if (village.id !== user.villageId) {
-        if (user.anbuId) return errorResponse("To change village, leave ANBU first");
-        if (user.clanId) return errorResponse("To change village, leave Clan first");
-        if (user.status !== "AWAKE") return errorResponse("Be AWAKE to change village");
+      if (village.id !== target.villageId) {
+        if (target.anbuId) return errorResponse("To change village, leave ANBU first");
+        if (target.clanId) return errorResponse("To change village, leave Clan first");
+        if (target.status !== "AWAKE") return errorResponse("AWAKE to change village");
       }
       // Update jutsus & items
       const { jutsuChanges, itemChanges } = await updateUserContent({
@@ -465,7 +515,7 @@ export const profileRouter = createTRPCRouter({
           changes: diff,
           relatedId: target.userId,
           relatedMsg: `Update: ${target.username}`,
-          relatedImage: target.avatar,
+          relatedImage: target.avatarLight,
         }),
       ]);
       return { success: true, message: `Data updated: ${diff.join(". ")}` };
@@ -510,14 +560,13 @@ export const profileRouter = createTRPCRouter({
       scaleUserStats(newAi);
 
       // Calculate diff
-      const diff = calculateContentDiff(
-        Object.fromEntries(
-          Object.entries(ai).filter(([k]) => Object.keys(input.data).includes(k)),
-        ),
-        Object.fromEntries(
-          Object.entries(newAi).filter(([k]) => Object.keys(input.data).includes(k)),
-        ),
-      )
+      const oldContent = Object.fromEntries(
+        Object.entries(ai).filter(([k]) => Object.keys(input.data).includes(k)),
+      );
+      const newContent = Object.fromEntries(
+        Object.entries(newAi).filter(([k]) => Object.keys(input.data).includes(k)),
+      );
+      const diff = calculateContentDiff(oldContent, newContent)
         .concat(jutsuChanges)
         .concat(itemChanges);
 
@@ -599,7 +648,7 @@ export const profileRouter = createTRPCRouter({
           changes: [`Username changed from ${user.username} to ${input.username}`],
           relatedId: ctx.userId,
           relatedMsg: `Update: ${user.username} -> ${input.username}`,
-          relatedImage: user.avatar,
+          relatedImage: user.avatarLight,
         });
         return { success: true, message: "Username updated" };
       }
@@ -895,9 +944,15 @@ export const profileRouter = createTRPCRouter({
       // Guard
       if (!user) return null;
       // Hide secrets
-      if (!requester || !canSeeSecretData(requester.role)) {
+      const isSelf = ctx.userId === user.userId;
+      if (!isSelf && (!requester || !canSeeSecretData(requester.role))) {
         user.earnedExperience = 8008;
         user.isBanned = false;
+        user.aiProfileId = null;
+      }
+      if (!isSelf && requester?.role === "USER") {
+        user.jutsus = [];
+        user.items = [];
       }
       if (!requester || !canSeeIps(requester.role)) {
         user.lastIp = "hidden";
@@ -1204,6 +1259,9 @@ export const fetchUpdatedUser = async (props: {
         loadout: {
           columns: { jutsuIds: true },
         },
+        promotions: {
+          limit: 1,
+        },
         userQuests: {
           where: or(
             and(isNull(questHistory.endAt), eq(questHistory.completed, 0)),
@@ -1221,9 +1279,9 @@ export const fetchUpdatedUser = async (props: {
   // Add in achievements
   if (user) {
     user.userQuests.push(...mockAchievementHistoryEntries(achievements, user));
-    user.userQuests = user.userQuests.filter(
-      (q) => !q.quest.hidden || canChangeContent(user.role),
-    );
+    user.userQuests = user.userQuests
+      .filter((q) => q.quest)
+      .filter((q) => !q.quest.hidden || canChangeContent(user.role));
   }
 
   // Hide information relating to quests
@@ -1243,7 +1301,11 @@ export const fetchUpdatedUser = async (props: {
   // and it is mostly done to keep user updated on the overview pages
   if (user && ["AWAKE", "ASLEEP"].includes(user.status)) {
     const sinceUpdate = secondsPassed(user.updatedAt);
-    if (sinceUpdate > 300 || forceRegen || user.villagePrestige < 0) {
+    if (
+      sinceUpdate > 300 || // Update user in database every 5 minutes only so as to reduce server load
+      forceRegen || // Hard overwrite for e.g. debugging or simply ensuring updated user
+      (user.villagePrestige < 0 && !user.isOutlaw) // To trigger getting kicked out of village
+    ) {
       const regen = (user.regeneration * secondsPassed(user.regenAt)) / 60;
       user.curHealth = Math.min(user.curHealth + regen, user.maxHealth);
       user.curStamina = Math.min(user.curStamina + regen, user.maxStamina);
@@ -1269,7 +1331,7 @@ export const fetchUpdatedUser = async (props: {
           where: eq(village.type, "OUTLAW"),
         });
         if (faction) {
-          user.villagePrestige = 0;
+          user.villagePrestige = -user.villagePrestige;
           user.villageId = faction.id;
           user.isOutlaw = true;
           if (user.clanId) {
@@ -1362,6 +1424,8 @@ export const fetchPublicUsers = async (
         return [asc(userData.level), asc(userData.experience)];
       case "Staff":
         return [desc(userData.role)];
+      case "Outlaws":
+        return [desc(userData.villagePrestige)];
     }
   };
   const [users, user] = await Promise.all([
@@ -1378,6 +1442,7 @@ export const fetchPublicUsers = async (
         ...(input.village !== undefined ? [eq(userData.villageId, input.village)] : []),
         ...(input.recruiterId ? [eq(userData.recruiterId, input.recruiterId)] : []),
         ...(input.orderBy === "Staff" ? [notInArray(userData.role, ["USER"])] : []),
+        ...(input.orderBy === "Outlaws" ? [eq(userData.isOutlaw, true)] : []),
         ...(input.isAi ? [eq(userData.isAi, true)] : []),
         ...(input.inArena && input.isAi
           ? [eq(userData.inArena, true)]
@@ -1390,23 +1455,24 @@ export const fetchPublicUsers = async (
           : [eq(userData.isSummon, false)]),
       ),
       columns: {
-        userId: true,
-        username: true,
         avatar: true,
         avatarLight: true,
-        rank: true,
-        isOutlaw: true,
-        level: true,
-        role: true,
         experience: true,
-        updatedAt: true,
-        reputationPointsTotal: true,
-        lastIp: true,
-        pvpStreak: true,
-        isSummon: true,
-        isEvent: true,
         inArena: true,
         isAi: true,
+        isEvent: true,
+        isOutlaw: true,
+        isSummon: true,
+        lastIp: true,
+        level: true,
+        pvpStreak: true,
+        rank: true,
+        reputationPointsTotal: true,
+        role: true,
+        updatedAt: true,
+        userId: true,
+        username: true,
+        villagePrestige: true,
       },
       // If AI, also include relations information
       with: {
@@ -1441,7 +1507,7 @@ export const fetchPublicUsers = async (
       : [null]),
   ]);
   // Guard
-  if (input.ip && (!user || !canSeeSecretData(user.role))) {
+  if (input.ip && (!user || !canSeeIps(user.role))) {
     throw serverError("FORBIDDEN", "You are not allowed to search IPs");
   }
   // Hide stuff

@@ -32,7 +32,7 @@ import type { ObjectiveRewardType } from "@/validators/objectives";
 import type { AiRuleType } from "@/validators/ai";
 import type { InferSelectModel, InferInsertModel } from "drizzle-orm";
 import type { AdditionalContext } from "@/validators/reports";
-import { ZodBgSchemaType } from "@/validators/backgroundSchema";
+import type { ZodBgSchemaType } from "@/validators/backgroundSchema";
 
 export const vector = customType<{
   data: ArrayBuffer;
@@ -423,6 +423,7 @@ export const clan = mysqlTable(
     leaderOrderId: varchar("leaderOrderId", { length: 191 }).notNull(),
     trainingBoost: double("trainingBoost").default(0).notNull(),
     ryoBoost: double("ryoBoost").default(0).notNull(),
+    regenBoost: double("regenBoost").default(0).notNull(),
     points: int("points").default(0).notNull(),
     bank: bigint("bank", { mode: "number" }).default(0).notNull(),
     pvpActivity: int("pvpActivity").default(0).notNull(),
@@ -1380,16 +1381,24 @@ export const userData = mysqlTable(
     immunityUntil: datetime("immunityUntil", { mode: "date", fsp: 3 })
       .default(sql`(CURRENT_TIMESTAMP(3))`)
       .notNull(),
+    robImmunityUntil: datetime("robImmunityUntil", { mode: "date", fsp: 3 })
+      .default(sql`(CURRENT_TIMESTAMP(3))`)
+      .notNull(),
     trainingStartedAt: datetime("trainingStartedAt", { mode: "date", fsp: 3 }),
     trainingSpeed: mysqlEnum("trainingSpeed", consts.TrainingSpeeds)
       .default("15min")
       .notNull(),
     currentlyTraining: mysqlEnum("currentlyTraining", consts.UserStatNames),
     unreadNotifications: smallint("unreadNotifications").default(0).notNull(),
-    unreadNews: tinyint("unreadNews").default(0).notNull(),
+    unreadNews: smallint("unreadNews").default(0).notNull(),
     questData: json("questData").$type<QuestTrackerType[]>(),
     senseiId: varchar("senseiId", { length: 191 }),
     medicalExperience: int("medicalExperience").default(0).notNull(),
+    // Settings
+    preferredStat: mysqlEnum("preferredStat", consts.StatTypes),
+    preferredGeneral1: mysqlEnum("preferredGeneral1", consts.GeneralTypes),
+    preferredGeneral2: mysqlEnum("preferredGeneral2", consts.GeneralTypes),
+    showBattleDescription: boolean("showBattleDescription").default(true).notNull(),
     // Statistics
     pvpFights: int("pvpFights").default(0).notNull(),
     pveFights: int("pveFights").default(0).notNull(),
@@ -1533,6 +1542,7 @@ export const userDataRelations = relations(userData, ({ one, many }) => ({
     fields: [userData.aiProfileId],
     references: [aiProfile.id],
   }),
+  promotions: many(linkPromotion, { relationName: "userPromotions" }),
 }));
 
 export const userReview = mysqlTable(
@@ -2262,6 +2272,41 @@ export const userRequestRelations = relations(userRequest, ({ one }) => ({
   }),
 }));
 
+export const userRewards = mysqlTable(
+  "UserRewards",
+  {
+    id: varchar("id", { length: 191 }).primaryKey().notNull(),
+    awardedById: varchar("awardedById", { length: 191 }).notNull(),
+    receiverId: varchar("receiverId", { length: 191 }).notNull(),
+    reputationAmount: float("reputationAmount").default(0).notNull(),
+    moneyAmount: bigint("moneyAmount", { mode: "number" }).default(0).notNull(),
+    reason: text("reason").notNull(),
+    createdAt: datetime("createdAt", { mode: "date", fsp: 3 })
+      .default(sql`(CURRENT_TIMESTAMP(3))`)
+      .notNull(),
+  },
+  (table) => {
+    return {
+      awardedByIdIdx: index("UserRewards_awardedById_idx").on(table.awardedById),
+      receiverIdIdx: index("UserRewards_receiverId_idx").on(table.receiverId),
+      createdAtIdx: index("UserRewards_createdAt_idx").on(table.createdAt),
+    };
+  },
+);
+
+export type UserRewards = InferSelectModel<typeof userRewards>;
+
+export const userRewardsRelations = relations(userRewards, ({ one }) => ({
+  awardedBy: one(userData, {
+    fields: [userRewards.awardedById],
+    references: [userData.userId],
+  }),
+  receiver: one(userData, {
+    fields: [userRewards.receiverId],
+    references: [userData.userId],
+  }),
+}));
+
 export const backgroundSchema = mysqlTable(
   "backgroundSchema",
   {
@@ -2287,3 +2332,77 @@ export const backgroundSchema = mysqlTable(
   },
 );
 export type BackgroundSchema = InferSelectModel<typeof backgroundSchema>;
+
+export const linkPromotion = mysqlTable(
+  "LinkPromotion",
+  {
+    id: varchar("id", { length: 191 }).primaryKey().notNull(),
+    userId: varchar("userId", { length: 191 }).notNull(),
+    url: varchar("url", { length: 191 }).notNull(),
+    points: int("points").default(0).notNull(),
+    reviewed: boolean("reviewed").default(false).notNull(),
+    reviewedBy: varchar("reviewedBy", { length: 191 }),
+    reviewedAt: datetime("reviewedAt", { mode: "date", fsp: 3 }),
+    createdAt: datetime("createdAt", { mode: "date", fsp: 3 })
+      .default(sql`(CURRENT_TIMESTAMP(3))`)
+      .notNull(),
+    updatedAt: datetime("updatedAt", { mode: "date", fsp: 3 })
+      .default(sql`(CURRENT_TIMESTAMP(3))`)
+      .notNull(),
+  },
+  (table) => {
+    return {
+      userIdIdx: index("LinkPromotion_userId_idx").on(table.userId),
+      reviewedByIdx: index("LinkPromotion_reviewedBy_idx").on(table.reviewedBy),
+    };
+  },
+);
+
+export type LinkPromotion = InferSelectModel<typeof linkPromotion>;
+
+export const linkPromotionRelations = relations(linkPromotion, ({ one }) => ({
+  user: one(userData, {
+    fields: [linkPromotion.userId],
+    references: [userData.userId],
+    relationName: "userPromotions",
+  }),
+  reviewer: one(userData, {
+    fields: [linkPromotion.reviewedBy],
+    references: [userData.userId],
+  }),
+}));
+
+export const userVote = mysqlTable(
+  "UserVote",
+  {
+    id: varchar("id", { length: 191 }).primaryKey().notNull(),
+    userId: varchar("userId", { length: 191 }).notNull(),
+    topWebGames: boolean("topWebGames").default(false).notNull(),
+    top100Arena: boolean("top100Arena").default(false).notNull(),
+    mmoHub: boolean("mmoHub").default(false).notNull(),
+    arenaTop100: boolean("arenaTop100").default(false).notNull(),
+    xtremeTop100: boolean("xtremeTop100").default(false).notNull(),
+    topOnlineMmorpg: boolean("topOnlineMmorpg").default(false).notNull(),
+    gamesTop200: boolean("gamesTop200").default(false).notNull(),
+    browserMmorpg: boolean("browserMmorpg").default(false).notNull(),
+    apexWebGaming: boolean("apexWebGaming").default(false).notNull(),
+    mmorpg100: boolean("mmorpg100").default(false).notNull(),
+    claimed: boolean("claimed").default(false).notNull(),
+    secret: varchar("secret", { length: 191 }).notNull(),
+    lastVoteAt: datetime("lastVoteAt", { mode: "date", fsp: 3 })
+      .default(sql`(CURRENT_TIMESTAMP(3))`)
+      .notNull(),
+  },
+  (table) => {
+    return {
+      userIdIdx: uniqueIndex("UserVote_userId_idx").on(table.userId),
+    };
+  },
+);
+
+export const userVoteRelations = relations(userVote, ({ one }) => ({
+  user: one(userData, {
+    fields: [userVote.userId],
+    references: [userData.userId],
+  }),
+}));

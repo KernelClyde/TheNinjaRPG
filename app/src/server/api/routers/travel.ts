@@ -1,6 +1,12 @@
 import { z } from "zod";
-import { eq, gte, and, or, isNull, inArray } from "drizzle-orm";
-import { createTRPCRouter, protectedProcedure } from "../trpc";
+import { nanoid } from "nanoid";
+import { eq, gte, and, or, isNull, inArray, sql } from "drizzle-orm";
+import {
+  createTRPCRouter,
+  protectedProcedure,
+  ratelimitMiddleware,
+  hasUserMiddleware,
+} from "../trpc";
 import { serverError, baseServerResponse, errorResponse } from "../trpc";
 import { calcGlobalTravelTime } from "@/libs/travel/controls";
 import { calcIsInVillage } from "@/libs/travel/controls";
@@ -8,12 +14,18 @@ import { isAtEdge, maxDistance } from "@/libs/travel/controls";
 import { SECTOR_HEIGHT, SECTOR_WIDTH } from "@/libs/travel/constants";
 import { secondsFromNow } from "@/utils/time";
 import { getServerPusher, updateUserOnMap } from "@/libs/pusher";
-import { userData, village } from "@/drizzle/schema";
+import { userData, clan, village, actionLog } from "@/drizzle/schema";
 import { fetchUser } from "@/routers/profile";
 import { initiateBattle } from "@/routers/combat";
 import { fetchSectorVillage } from "@/routers/village";
 import { findRelationship } from "@/utils/alliance";
 import { structureBoost } from "@/utils/village";
+import {
+  ROBBING_SUCCESS_CHANCE,
+  ROBBING_STOLLEN_AMOUNT,
+  ROBBING_VILLAGE_PRESTIGE_GAIN,
+  ROBBING_IMMUNITY_DURATION,
+} from "@/drizzle/constants";
 import * as map from "@/data/hexasphere.json";
 import { UserStatuses } from "@/drizzle/constants";
 import type { inferRouterOutputs } from "@trpc/server";
@@ -24,6 +36,180 @@ import type { GlobalMapData } from "@/libs/travel/types";
 const pusher = getServerPusher();
 
 export const travelRouter = createTRPCRouter({
+  // Rob another player
+  robPlayer: protectedProcedure
+    .use(ratelimitMiddleware)
+    .use(hasUserMiddleware)
+    .input(
+      z.object({
+        longitude: z
+          .number()
+          .int()
+          .min(0)
+          .max(SECTOR_WIDTH - 1),
+        latitude: z
+          .number()
+          .int()
+          .min(0)
+          .max(SECTOR_HEIGHT - 1),
+        sector: z.number().int(),
+        userId: z.string(),
+      }),
+    )
+    .output(
+      baseServerResponse.extend({
+        battleId: z.string().optional(),
+        money: z.number().optional(),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      // Query
+      const [user, target, sectorData] = await Promise.all([
+        fetchUser(ctx.drizzle, ctx.userId),
+        fetchUser(ctx.drizzle, input.userId),
+        ctx.drizzle.query.village.findFirst({
+          where: eq(village.sector, input.sector),
+        }),
+      ]);
+
+      // Guard
+      if (!user.isOutlaw) return errorResponse("Only outlaws can rob other players");
+      if (user.status !== "AWAKE") return errorResponse("You are not awake");
+      if (user.isBanned) return errorResponse("You are banned");
+      if (target.isBanned) return errorResponse("Target is banned");
+      if (target.status !== "AWAKE") return errorResponse("Target cannot currently be robbed");
+      if (user.clanId === target.clanId)
+        return errorResponse("Cannot rob faction members");
+      if (target.rank === "STUDENT" || target.rank === "GENIN") {
+        return errorResponse("Cannot rob Academy Students or Genins");
+      }
+      if (sectorData?.pvpDisabled) {
+        return errorResponse("Cannot rob players in this zone");
+      }
+      if (target.robImmunityUntil && target.robImmunityUntil > new Date()) {
+        return errorResponse("Target is immune from being robbed");
+      }
+      if (target.immunityUntil && target.immunityUntil > new Date()) {
+        return errorResponse("Target is immune from being robbed");
+      }
+      if (
+        target.sector !== input.sector ||
+        target.longitude !== input.longitude ||
+        target.latitude !== input.latitude
+      ) {
+        return errorResponse("Target is not in the specified location");
+      }
+      if (
+        user.sector !== input.sector ||
+        user.longitude !== input.longitude ||
+        user.latitude !== input.latitude
+      ) {
+        return errorResponse("You are not in the correct sector");
+      }
+
+      // 40% chance to rob successfully
+      const success = Math.random() < ROBBING_SUCCESS_CHANCE;
+      if (success) {
+        // Rob 30% of target's money
+        const stolenAmount = Math.floor(target.money * ROBBING_STOLLEN_AMOUNT);
+
+        // Update robber's money and prestige
+        const robberUpdate = await ctx.drizzle
+          .update(userData)
+          .set({
+            money: sql`${userData.money} + ${stolenAmount}`,
+            villagePrestige: sql`${userData.villagePrestige} + ${ROBBING_VILLAGE_PRESTIGE_GAIN}`,
+          })
+          .where(eq(userData.userId, ctx.userId));
+        if (robberUpdate.rowsAffected === 0) {
+          return errorResponse("Failed to update robber's data");
+        }
+
+        // Update target's money and set immunity
+        const [targetUpdate] = await Promise.all([
+          ctx.drizzle
+            .update(userData)
+            .set({
+              money: sql`${userData.money} - ${stolenAmount}`,
+              robImmunityUntil: secondsFromNow(ROBBING_IMMUNITY_DURATION),
+            })
+            .where(eq(userData.userId, input.userId)),
+          ...(user.clanId
+            ? [
+                ctx.drizzle
+                  .update(clan)
+                  .set({ points: sql`${clan.points} + 1` })
+                  .where(eq(clan.id, user.clanId)),
+              ]
+            : []),
+        ]);
+        if (targetUpdate.rowsAffected === 0) {
+          // Rollback robber update if target update fails
+          await ctx.drizzle
+            .update(userData)
+            .set({
+              money: sql`${userData.money} - ${stolenAmount}`,
+              villagePrestige: sql`${userData.villagePrestige} - ${ROBBING_VILLAGE_PRESTIGE_GAIN}`,
+            })
+            .where(eq(userData.userId, ctx.userId));
+          return errorResponse("Failed to update target's data");
+        }
+
+        // Log the action
+        const logInsert = await ctx.drizzle.insert(actionLog).values({
+          id: nanoid(),
+          userId: user.userId,
+          tableName: "user",
+          changes: [`Was robbed for ${stolenAmount} ryo by ${user.username}`],
+          relatedId: user.userId,
+          relatedMsg: `Was robbed by ${user.username}`,
+          relatedImage: user.avatarLight,
+        });
+        if (logInsert.rowsAffected === 0) {
+          // Non-critical error, continue but log it
+          console.error("Failed to insert action log for robbery");
+        }
+
+        // Notify target (non-critical)
+        await pusher.trigger(target.userId, "event", {
+          type: "userMessage",
+          message: `You've been robbed by ${user.username}`,
+        });
+
+        return {
+          success: true,
+          message: `Successfully robbed ${stolenAmount} money from ${target.username}!`,
+          money: user.money + stolenAmount,
+        };
+      } else {
+        // Failed rob attempt - initiate combat
+        const battle = await initiateBattle(
+          {
+            longitude: input.longitude,
+            latitude: input.latitude,
+            sector: input.sector,
+            userIds: [ctx.userId],
+            targetIds: [input.userId],
+            client: ctx.drizzle,
+            asset: "ground",
+          },
+          "COMBAT",
+        );
+
+        if (battle.success) {
+          return {
+            success: false,
+            message: "Rob attempt failed! Prepare for combat!",
+            battleId: battle.battleId,
+          };
+        } else {
+          return {
+            success: false,
+            message: battle.message,
+          };
+        }
+      }
+    }),
   // Get users within a given sector
   getSectorData: protectedProcedure
     .input(z.object({ sector: z.number().int() }))
@@ -46,6 +232,7 @@ export const travelRouter = createTRPCRouter({
             rank: true,
             isOutlaw: true,
             immunityUntil: true,
+            robImmunityUntil: true,
             updatedAt: true,
             villageId: true,
             battleId: true,
@@ -90,7 +277,7 @@ export const travelRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ input, ctx }) => {
-      const user = await fetchUser(ctx.drizzle, ctx.userId);
+      let user = await fetchUser(ctx.drizzle, ctx.userId);
       if (!isAtEdge({ x: user.longitude, y: user.latitude })) {
         return { success: false, message: "You are not at the edge of a sector" };
       }
@@ -122,9 +309,12 @@ export const travelRouter = createTRPCRouter({
           data: { sector: input.sector, travelFinishAt: endTime, status: "TRAVEL" },
         };
       } else {
-        const userData = await fetchUser(ctx.drizzle, ctx.userId);
-        if (userData.status !== "AWAKE") {
-          return { success: false, message: `Status is: ${user.status.toLowerCase()}` };
+        user = await fetchUser(ctx.drizzle, ctx.userId);
+        if (user.status !== "AWAKE") {
+          return {
+            success: false,
+            message: `Status is: ${user.status.toLowerCase()}`,
+          };
         } else {
           return { success: false, message: "Failed to start travel" };
         }
@@ -270,17 +460,17 @@ export const travelRouter = createTRPCRouter({
         void updateUserOnMap(pusher, input.sector, output);
         return { success: true, message: "OK", data: output };
       } else {
-        const userData = await fetchUser(ctx.drizzle, userId);
-        if (userData.status !== "AWAKE") {
-          return errorResponse(`Status is: ${userData.status.toLowerCase()}`);
+        const user = await fetchUser(ctx.drizzle, userId);
+        if (user.status !== "AWAKE") {
+          return errorResponse(`Status is: ${user.status.toLowerCase()}`);
         }
-        if (userData.sector !== sector) {
+        if (user.sector !== sector) {
           return errorResponse("You are not in the correct sector");
         }
-        if (userData.longitude !== curLongitude || userData.latitude !== curLatitude) {
+        if (user.longitude !== curLongitude || user.latitude !== curLatitude) {
           return errorResponse("You have moved since you started this move");
         }
-        throw serverError("BAD_REQUEST", `Unknown error while moving`);
+        throw serverError("BAD_REQUEST", "Unknown error while moving");
       }
     }),
 });

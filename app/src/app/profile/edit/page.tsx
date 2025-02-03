@@ -16,6 +16,7 @@ import DistributeStatsForm from "@/layout/StatsDistributionForm";
 import ItemWithEffects from "@/layout/ItemWithEffects";
 import NindoChange from "@/layout/NindoChange";
 import AiProfileEdit from "@/layout/AiProfileEdit";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Form,
   FormControl,
@@ -35,6 +36,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { getUserFederalStatus } from "@/utils/paypal";
 import { ActionSelector } from "@/layout/CombatActions";
 import {
@@ -60,6 +62,7 @@ import { COST_REROLL_ELEMENT } from "@/drizzle/constants";
 import { COST_CHANGE_GENDER } from "@/drizzle/constants";
 import { round } from "@/utils/math";
 import { genders } from "@/validators/register";
+import { updateUserPreferencesSchema } from "@/validators/user";
 import { UploadButton } from "@/utils/uploadthing";
 import { capUserStats } from "@/libs/profile";
 import { getUserElements } from "@/validators/user";
@@ -226,13 +229,13 @@ export default function EditProfile() {
           <RerollElement />
         </Accordion>
         <Accordion
-          title="AI Profile"
+          title="Combat Preferences"
           selectedTitle={activeElement}
-          unselectedSubtitle="Adjust how your character is played by AI"
+          unselectedSubtitle="Customize battle preferences and AI behavior"
           selectedSubtitle=""
           onClick={setActiveElement}
         >
-          <AdjustAiProfile userId={userData.userId} />
+          <BattleSettingsEdit userId={userData.userId} />
         </Accordion>
         {canSwapBloodline(userData.role) && (
           <Accordion
@@ -262,12 +265,62 @@ export default function EditProfile() {
 }
 
 /**
- * AI Profile Edit
+ * Battle Settings Edit
  */
-const AdjustAiProfile: React.FC<{ userId: string }> = ({ userId }) => {
+const BattleSettingsEdit: React.FC<{ userId: string }> = ({ userId }) => {
   // Queries & mutations
+  const [showActive, setShowActive] = useState<string>("preferred");
   const { data: profile, isPending: isPendingProfile } =
     api.profile.getPublicUser.useQuery({ userId: userId }, { enabled: !!userId });
+  const { data: userData, updateUser } = useRequiredUserData();
+  const utils = api.useUtils();
+
+  // Form setup
+  const form = useForm<z.infer<typeof updateUserPreferencesSchema>>({
+    resolver: zodResolver(updateUserPreferencesSchema),
+    defaultValues: {
+      preferredStat: null,
+      preferredGeneral1: null,
+      preferredGeneral2: null,
+    },
+  });
+
+  // Update battle description setting
+  const { mutate: updateBattleDescription } =
+    api.profile.updateBattleDescription.useMutation({
+      onSuccess: async () => {
+        await utils.profile.getUser.invalidate();
+      },
+    });
+
+  // Update highest preferences
+  const { mutate: updatePreferences } = api.profile.updatePreferences.useMutation({
+    onSuccess: async (data) => {
+      const values = form.getValues();
+      showMutationToast(data);
+      await updateUser({
+        preferredStat: values.preferredStat,
+        preferredGeneral1: values.preferredGeneral1,
+        preferredGeneral2: values.preferredGeneral2,
+      });
+    },
+  });
+
+  // Update form when preferences are loaded
+  useEffect(() => {
+    if (userData) {
+      form.reset({
+        preferredStat: userData.preferredStat,
+        preferredGeneral1: userData.preferredGeneral1,
+        preferredGeneral2: userData.preferredGeneral2,
+      });
+    }
+  }, [userData, form]);
+
+  // Form submission
+  const onSubmit = (values: z.infer<typeof updateUserPreferencesSchema>) => {
+    updatePreferences(values);
+  };
 
   // Loaders
   if (!profile || isPendingProfile) return <Loader explanation="Loading profile" />;
@@ -275,11 +328,134 @@ const AdjustAiProfile: React.FC<{ userId: string }> = ({ userId }) => {
   // Render
   return (
     <div className="pb-3">
-      <p>
-        Play with the AI profile of your character. This allows you to change how your
-        character behaves in the game in e.g. kage battles.
+      <div className="flex items-center space-x-2 m-2 mb-4">
+        <Tabs
+          defaultValue={showActive}
+          className="flex flex-col items-center justify-center w-full"
+          onValueChange={(value) => setShowActive(value)}
+        >
+          <TabsList className="text-center">
+            <TabsTrigger value="preferred">Preferences</TabsTrigger>
+            <TabsTrigger value="combat">Settings</TabsTrigger>
+            <TabsTrigger value="aiprofile">AI Profile</TabsTrigger>
+          </TabsList>
+          <TabsContent value="preferred">
+            <Form {...form}>
+              <form
+                onSubmit={form.handleSubmit(onSubmit)}
+                className="p-4 grid grid-cols-4 gap-3 w-full items-end"
+              >
+                <FormField
+                  control={form.control}
+                  name="preferredStat"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Offense</FormLabel>
+                      <Select
+                        onValueChange={(value) => field.onChange(value ? value : null)}
+                        value={field.value || undefined}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Highest" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value={null!}>Highest</SelectItem>
+                          <SelectItem value="Ninjutsu">Ninjutsu</SelectItem>
+                          <SelectItem value="Genjutsu">Genjutsu</SelectItem>
+                          <SelectItem value="Taijutsu">Taijutsu</SelectItem>
+                          <SelectItem value="Bukijutsu">Bukijutsu</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="preferredGeneral1"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>General 1</FormLabel>
+                      <Select
+                        onValueChange={(value) => field.onChange(value ? value : null)}
+                        value={field.value || undefined}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Highest" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value={null!}>Highest</SelectItem>
+                          <SelectItem value="Strength">Strength</SelectItem>
+                          <SelectItem value="Intelligence">Intelligence</SelectItem>
+                          <SelectItem value="Willpower">Willpower</SelectItem>
+                          <SelectItem value="Speed">Speed</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="preferredGeneral2"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>General 2</FormLabel>
+                      <Select
+                        onValueChange={(value) => field.onChange(value ? value : null)}
+                        value={field.value || undefined}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Highest" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value={null!}>Highest</SelectItem>
+                          <SelectItem value="Strength">Strength</SelectItem>
+                          <SelectItem value="Intelligence">Intelligence</SelectItem>
+                          <SelectItem value="Willpower">Willpower</SelectItem>
+                          <SelectItem value="Speed">Speed</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <Button type="submit">Save</Button>
+              </form>
+              <FormDescription>
+                This will be used as your highest offense type in combat instead of
+                automatically choosing the highest stat.
+              </FormDescription>
+            </Form>
+          </TabsContent>
+          <TabsContent value="combat">
+            <Switch
+              id="battle-description"
+              checked={userData?.showBattleDescription}
+              onCheckedChange={(checked) =>
+                updateBattleDescription({ showBattleDescription: checked })
+              }
+            />
+            <Label htmlFor="battle-description">Show battle descriptions</Label>
+          </TabsContent>
+          <TabsContent value="aiprofile">
+            <AiProfileEdit userData={profile} hideTitle />
+          </TabsContent>
+        </Tabs>
+      </div>
+
+      <p className="italic">
+        This allows you to change how your character behaves in the game in e.g. kage
+        battles.
       </p>
-      <AiProfileEdit userData={profile} hideTitle />
     </div>
   );
 };

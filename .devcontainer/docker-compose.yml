@@ -20,12 +20,14 @@ services:
     container_name: tnr_phpmyadmin
     image: phpmyadmin:latest
     restart: always
+    ports:
+      - "3001:80"
     env_file:
       - .env
     depends_on:
       - db
-    ports:
-      - "3001:80"
+    networks:
+      - default
 
   # Planetscale - local http proxy replacement
   planetscale:
@@ -75,7 +77,7 @@ services:
     restart: always
     image: nanomathias/nginx-local-ssl:release-1.0.1
     ports:
-      - "3003:3003"
+      - "3003:3003" # Upstash
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/mysite.template:ro
     env_file:

@@ -11,8 +11,9 @@ import {
   IMG_MISSION_C,
   IMG_MISSION_D,
   IMG_MISSION_E,
+  type LetterRank,
+  type QuestType,
 } from "@/drizzle/constants";
-import type { LetterRank, UserRole } from "@/drizzle/constants";
 import type { UserWithRelations } from "@/routers/profile";
 import type { AllObjectivesType, AllObjectiveTask } from "@/validators/objectives";
 import type { Quest, UserData } from "@/drizzle/schema";
@@ -22,7 +23,10 @@ import type { QuestTrackerType } from "@/validators/objectives";
  * Get currently active quests for a user
  */
 export const getUserQuests = (user: NonNullable<UserWithRelations>) => {
-  return user?.userQuests?.map((uq) => ({ ...uq, ...uq.quest })) ?? [];
+  return (
+    user?.userQuests.filter((uq) => !!uq.quest).map((uq) => ({ ...uq, ...uq.quest })) ??
+    []
+  );
 };
 
 /**
@@ -361,6 +365,7 @@ export const mockAchievementHistoryEntries = (
   user: NonNullable<UserWithRelations>,
 ) => {
   return quests
+    .filter((q) => q !== null)
     .filter((q) => !q.hidden || canChangeContent(user.role))
     .filter((q) => !user.userQuests?.find((uq) => uq.questId === q.id))
     .map((a) => ({
@@ -387,8 +392,8 @@ export const mockAchievementHistoryEntries = (
  * `hideLocation` property set to true and the user's sector does not match the objective's sector,
  * it will obfuscate the objective's location by setting its latitude, longitude, and sector to 1337.
  */
-export const hideQuestInformation = (quest: Quest, user?: UserData) => {
-  quest.content.objectives.forEach((objective) => {
+export const hideQuestInformation = (quest?: Quest, user?: UserData) => {
+  quest?.content.objectives.forEach((objective) => {
     if (
       "hideLocation" in objective &&
       objective.hideLocation &&
@@ -409,11 +414,24 @@ export const hideQuestInformation = (quest: Quest, user?: UserData) => {
  * @param role - The role of the user.
  * @returns A boolean indicating whether the quest is either hidden and the user can play hidden quests, or the quest is not expired.
  */
-export const filterHiddenAndExpiredQuest = (
-  quest: { hidden: boolean; expiresAt?: string | null },
-  role: UserRole,
+export const isAvailableUserQuests = (
+  quest: {
+    hidden: boolean;
+    questType: QuestType;
+    expiresAt?: string | null;
+    requiredVillage: string | null;
+    previousAttempts?: number | null;
+    completed?: number | null;
+  },
+  user: UserData,
 ) => {
-  const hideCheck = !quest.hidden;
+  const hideCheck = !quest.hidden || canPlayHiddenQuests(user.role);
   const expiresCheck = !quest.expiresAt || new Date(quest.expiresAt) > new Date();
-  return (hideCheck || canPlayHiddenQuests(role)) && expiresCheck;
+  const prevCheck =
+    quest.questType !== "event" ||
+    !quest.previousAttempts ||
+    (quest.previousAttempts <= 1 && quest.completed === 0);
+  const villageCheck =
+    !quest.requiredVillage || quest.requiredVillage === user.villageId;
+  return hideCheck && expiresCheck && prevCheck && villageCheck;
 };

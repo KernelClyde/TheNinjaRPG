@@ -7,6 +7,7 @@ import type { GroundEffect, UserEffect, ActionEffect } from "./types";
 import type { StatNames, GenNames, DmgConfig } from "./constants";
 import type { DamageTagType, PierceTagType } from "@/libs/combat/types";
 import type { WeaknessTagType } from "@/libs/combat/types";
+import type { ShieldTagType } from "@/libs/combat/types";
 import type { GeneralType } from "@/drizzle/constants";
 import type { BattleType } from "@/drizzle/constants";
 import { capitalizeFirstLetter } from "@/utils/sanitize";
@@ -40,25 +41,26 @@ export const absorb = (
         const damageEffect = usersEffects.find((e) => e.id === effectId);
         if (damageEffect) {
           const ratio = getEfficiencyRatio(damageEffect, effect);
-          const convert =
-            Math.ceil(
-              effect.calculation === "percentage"
-                ? consequence.damage * (power / 100)
-                : power > consequence.damage
-                  ? consequence.damage
-                  : power,
-            ) * ratio;
-          // consequence.damage -= convert;
+          // Calculate absorption amount for this effect
+          const absorbAmount =
+            effect.calculation === "percentage"
+              ? consequence.damage * (power / 100)
+              : Math.min(power, consequence.damage);
+          const convert = Math.ceil(absorbAmount * ratio);
+          // Apply absorption to each pool
           pools.map((pool) => {
             switch (pool) {
               case "Health":
-                consequence.absorb_hp = convert / nPools;
+                // Add to existing absorb value instead of overwriting
+                consequence.absorb_hp = (consequence.absorb_hp || 0) + convert / nPools;
                 break;
               case "Stamina":
-                consequence.absorb_sp = convert / nPools;
+                // Add to existing absorb value instead of overwriting
+                consequence.absorb_sp = (consequence.absorb_sp || 0) + convert / nPools;
                 break;
               case "Chakra":
-                consequence.absorb_cp = convert / nPools;
+                // Add to existing absorb value instead of overwriting
+                consequence.absorb_cp = (consequence.absorb_cp || 0) + convert / nPools;
                 break;
             }
           });
@@ -340,6 +342,16 @@ export const adjustDamageGiven = (
             effect.calculation === "percentage"
               ? (power / 100) * consequence.damage
               : power;
+          if (effect.fromType === "bloodline") {
+            if (
+              "allowBloodlineDamageIncrease" in damageEffect &&
+              "allowBloodlineDamageDecrease" in damageEffect &&
+              ((change > 0 && !damageEffect.allowBloodlineDamageIncrease) ||
+                (change < 0 && !damageEffect.allowBloodlineDamageDecrease))
+            ) {
+              return;
+            }
+          }
           consequence.damage = consequence.damage + change * ratio;
         }
       }
@@ -539,6 +551,7 @@ const removeEffects = (
 
   // Note: add !effect.castThisRound && to remove effects only after the round
   if (effect.power === 100) {
+    // Remove user effects
     usersEffects
       .filter((e) => e.targetId === effect.targetId)
       .filter((e) => e.fromType !== "bloodline")
@@ -547,6 +560,20 @@ const removeEffects = (
       .map((e) => {
         e.rounds = 0;
       });
+
+    // Type guard to identify ground effects
+    const isGroundEffect = (e: UserEffect | GroundEffect): e is GroundEffect =>
+      !("targetId" in e);
+
+    // Remove ground effects at the same location as the target
+    usersEffects
+      .filter(isGroundEffect)
+      .filter((e) => e.longitude === target.longitude && e.latitude === target.latitude)
+      .filter(type === "positive" ? isPositiveUserEffect : isNegativeUserEffect)
+      .map((e) => {
+        e.rounds = 0;
+      });
+
     text = `${target.username} was cleared of all ${type} status effects. `;
     effect.rounds = 0;
   }
@@ -885,7 +912,20 @@ export const flee = (
       : "";
   if (primaryCheck) {
     target.fledBattle = true;
-    text = `${target.username} manages to flee the battle!`;
+    // If the player successfully flees, handle money based on whether they were robbed or robbed others
+    if (target.moneyStolen < 0) {
+      // This player was robbed - restore their money
+      target.money -= target.moneyStolen; // Add back the stolen money (moneyStolen is negative)
+      target.moneyStolen = 0;
+      text = `${target.username} manages to flee the battle and recovers their stolen money!`;
+    } else if (target.moneyStolen > 0) {
+      // This player robbed others - they lose the stolen money when fleeing
+      target.money -= target.moneyStolen;
+      target.moneyStolen = 0;
+      text = `${target.username} manages to flee the battle but drops all the stolen money!`;
+    } else {
+      text = `${target.username} manages to flee the battle!`;
+    }
   } else {
     text += `${target.username} fails to flee the battle!`;
   }
@@ -920,8 +960,10 @@ export const heal = (
   applyTimes: number,
 ) => {
   // Prevent?
-  const { pass } = preventCheck(usersEffects, "healprevent", target);
-  if (!pass) return preventResponse(effect, target, "cannot be healed");
+  const { pass, preventTag } = preventCheck(usersEffects, "healprevent", target);
+  if (preventTag && preventTag.createdRound < effect.createdRound) {
+    if (!pass) return preventResponse(effect, target, "cannot be healed");
+  }
   // Calculate healing
   const { power } = getPower(effect);
   const parsedEffect = HealTag.parse(effect);
@@ -1008,6 +1050,10 @@ export const reflect = (
   consequences: Map<string, Consequence>,
   target: BattleUserState,
 ) => {
+  const { pass, preventTag } = preventCheck(usersEffects, "buffprevent", target);
+  if (preventTag && preventTag.createdRound < effect.createdRound) {
+    if (!pass) return preventResponse(effect, target, "cannot be buffed");
+  }
   const { power, qualifier } = getPower(effect);
   if (!effect.isNew && !effect.castThisRound) {
     consequences.forEach((consequence, effectId) => {
@@ -1093,6 +1139,29 @@ export const lifesteal = (
     });
   }
   return getInfo(target, effect, `will steal ${qualifier} damage as health`);
+};
+
+/** Create a temporary HP shield that absorbs damage */
+export const shield = (effect: UserEffect, target: BattleUserState) => {
+  // Apply
+  const { power } = getPower(effect);
+  const primaryCheck = Math.random() < power / 100;
+  const shieldEffect = effect as ShieldTagType;
+  let info: ActionEffect | undefined = undefined;
+  if (effect.isNew && effect.rounds) {
+    if (primaryCheck) {
+      effect.power = shieldEffect.health;
+      info = getInfo(target, effect, `shield with ${effect.power.toFixed(2)} HP`);
+    } else {
+      effect.rounds = 0;
+      info = { txt: `${target.username}'s shield was not created`, color: "blue" };
+    }
+  }
+  if (effect.power <= 0) {
+    info = { txt: `${target.username}'s shield was destroyed`, color: "red" };
+    effect.rounds = 0;
+  }
+  return info;
 };
 
 /**
@@ -1232,19 +1301,22 @@ export const rob = (
   if (instant || residual) {
     const primaryCheck = Math.random() < power / 100;
     if (primaryCheck && "robPercentage" in effect && effect.robPercentage) {
-      const targetMoney = target.money - target.moneyStolen;
-      let stolen = Math.floor(targetMoney * (effect.robPercentage / 100));
-      stolen = Math.floor(stolen > targetMoney ? targetMoney : stolen);
-      if (stolen > 0) {
-        origin.moneyStolen += stolen;
-        target.moneyStolen -= stolen;
+      // Only rob from pocket money, never from bank
+      const pocketMoney = Math.max(0, target.money);
+      if (pocketMoney > 0) {
+        let stolen = Math.floor(pocketMoney * (effect.robPercentage / 100));
+        stolen = Math.min(stolen, pocketMoney); // Ensure we don't steal more than what's in pocket
+        origin.moneyStolen = (origin.moneyStolen || 0) + stolen;
+        target.moneyStolen = (target.moneyStolen || 0) - stolen;
+        target.money -= stolen;
+        origin.money += stolen;
         return {
-          txt: `${origin.username} stole ${stolen} ryo from ${target.username}`,
+          txt: `${origin.username} stole ${stolen} ryo from ${target.username}'s pocket`,
           color: "blue",
         };
       } else {
         return {
-          txt: `${origin.username} failed to steal ryo from ${target.username} but there was nothing more to steal`,
+          txt: `${origin.username} failed to steal ryo from ${target.username} because they have no ryo in their pocket`,
           color: "blue",
         };
       }
@@ -1369,6 +1441,26 @@ export const stealth = (effect: UserEffect, target: BattleUserState) => {
   if (mainCheck) {
     const info = getInfo(target, effect, "will be stealthed");
     return info;
+  } else if (effect.isNew) {
+    effect.rounds = 0;
+  }
+};
+
+/** Seal elemental jutsu */
+export const elementalseal = (effect: UserEffect, target: BattleUserState) => {
+  const { power } = getPower(effect);
+  const mainCheck = Math.random() < power / 100;
+  if (mainCheck) {
+    // Check if effect has elements property
+    if ("elements" in effect && effect.elements) {
+      const elements = effect.elements.length > 0 ? effect.elements.join(", ") : "no";
+      const info = getInfo(
+        target,
+        effect,
+        `will be sealed from using ${elements} jutsu`,
+      );
+      return info;
+    }
   } else if (effect.isNew) {
     effect.rounds = 0;
   }
@@ -1659,7 +1751,7 @@ const preventCheck = (
   const preventTag = usersEffects.find(
     (e) => e.type == type && e.targetId === target.userId && !e.castThisRound,
   );
-  if (preventTag) {
+  if (preventTag && (preventTag.rounds === undefined || preventTag.rounds > 0)) {
     const power = preventTag.power + preventTag.level * preventTag.powerPerLevel;
     return { pass: Math.random() > power / 100, preventTag: preventTag };
   }
