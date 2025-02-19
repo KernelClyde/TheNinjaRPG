@@ -56,7 +56,7 @@ export const jutsuRouter = createTRPCRouter({
     .input(
       jutsuFilteringSchema.extend({
         cursor: z.number().nullish(),
-        limit: z.number().min(1).max(500),
+        limit: z.number().min(1).max(1000),
         hideAi: z.boolean().optional(),
       }),
     )
@@ -712,6 +712,7 @@ export const jutsuDatabaseFilter = (input?: JutsuFilteringSchema) => {
     ...(input?.requiredLevel ? [gte(jutsu.requiredLevel, input.requiredLevel)] : []),
     ...(input?.rank ? [eq(jutsu.requiredRank, input.rank)] : []),
     ...(input?.rarity ? [eq(jutsu.jutsuRank, input.rarity)] : []),
+    ...(input?.villageId ? [eq(jutsu.villageId, input.villageId)] : []),
 
     ...(input?.appear
       ? [
